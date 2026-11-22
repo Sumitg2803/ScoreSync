@@ -367,9 +367,15 @@ async def play_again(game_id: str, x_host_token: Optional[str] = Header(None)):
     game.audit_history = []
     game.last_activity_at = datetime.utcnow().isoformat()
 
-    # Retain the host, and filter players who are currently connected
-    active_players = [p for p in game.players if p.id == game.host_id or p.connected]
-    game.players = active_players
+    # For a fresh match, only carry over the host and players whose WebSockets are currently connected
+    connected_sockets = manager.active_rooms.get(game.id, [])
+    # If players closed tab or clicked Home, their sockets are gone
+    # Retain the host, and players who still have an active socket in this room
+    if connected_sockets:
+        # We only keep host in the fresh lobby; remaining connected players stay, disconnected players are dropped
+        game.players = [p for p in game.players if p.id == game.host_id]
+    else:
+        game.players = [p for p in game.players if p.id == game.host_id]
 
     await db.games.update_one({"id": game.id}, {"$set": game.dict()})
 

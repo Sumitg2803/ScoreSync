@@ -68,7 +68,10 @@ export const ResultsScreen: React.FC = () => {
     if (isHost) {
       await resetCurrentGame();
     } else {
-      await leaveGame();
+      // Player leaves the final results screen: cleanly disconnect without deleting completed scores
+      const { disconnectWebSocket } = useGameStore.getState();
+      disconnectWebSocket();
+      useGameStore.setState({ currentGame: null, currentPlayerId: null, isHost: false });
     }
     navigate('/');
   };
