@@ -3,6 +3,8 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { useGameStore } from '../store/useGameStore';
 import { Avatar } from '../components/Avatar';
+import { CancelGameModal } from '../components/CancelGameModal';
+import { ToastContainer } from '../components/ToastContainer';
 import { ArrowLeft, Play, Copy, Check, Users } from 'lucide-react';
 
 export const WaitingRoomScreen: React.FC = () => {
@@ -12,7 +14,12 @@ export const WaitingRoomScreen: React.FC = () => {
   const currentGame = useGameStore((state) => state.currentGame);
   const isHost = useGameStore((state) => state.isHost);
   const startGame = useGameStore((state) => state.startGame);
+  const leaveGame = useGameStore((state) => state.leaveGame);
+  const resetCurrentGame = useGameStore((state) => state.resetCurrentGame);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+  const toasts = useGameStore((state) => state.toasts);
+
+  const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
 
   const gameId = id || currentGame?.id || 'A7K9D2';
   const players = currentGame?.players || [];
@@ -46,14 +53,26 @@ export const WaitingRoomScreen: React.FC = () => {
     navigate(`/host-dashboard/${gameId}`);
   };
 
+  const handleConfirmExit = async () => {
+    setIsCancelModalOpen(false);
+    if (isHost) {
+      await resetCurrentGame();
+    } else {
+      await leaveGame();
+    }
+    navigate('/');
+  };
+
   return (
     <MobileContainer>
+      <ToastContainer toasts={toasts} />
       <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8">
         {/* Top Header */}
         <div>
           <button
-            onClick={() => navigate('/')}
+            onClick={() => setIsCancelModalOpen(true)}
             className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-white/60 transition cursor-pointer"
+            title={isHost ? 'Cancel Game' : 'Leave Room'}
           >
             <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
           </button>
@@ -120,6 +139,14 @@ export const WaitingRoomScreen: React.FC = () => {
             </div>
           )}
         </div>
+
+        {/* Exit Confirmation Modal */}
+        <CancelGameModal
+          isOpen={isCancelModalOpen}
+          onClose={() => setIsCancelModalOpen(false)}
+          onConfirm={handleConfirmExit}
+          isHost={isHost}
+        />
       </div>
     </MobileContainer>
   );
