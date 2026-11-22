@@ -7,6 +7,7 @@ import { AddRoundSheet } from '../components/AddRoundSheet';
 import { EditRoundSheet } from '../components/EditRoundSheet';
 import { GameCodeModal } from '../components/GameCodeModal';
 import { TransferHostModal } from '../components/TransferHostModal';
+import { CompleteGameModal } from '../components/CompleteGameModal';
 import { ToastContainer } from '../components/ToastContainer';
 import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut } from 'lucide-react';
 
@@ -29,6 +30,8 @@ export const HostDashboardScreen: React.FC = () => {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
+  const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
+  const [isFinishing, setIsFinishing] = useState(false);
 
   const gameId = id || currentGame?.id || 'A7K9D2';
 
@@ -79,8 +82,16 @@ export const HostDashboardScreen: React.FC = () => {
   );
 
   const handleFinishGame = async () => {
-    await completeGame();
-    navigate(`/results/${gameId}`);
+    try {
+      setIsFinishing(true);
+      await completeGame();
+      setIsCompleteModalOpen(false);
+      navigate(`/results/${gameId}`);
+    } catch (err: any) {
+      alert(err.message || 'Failed to complete game');
+    } finally {
+      setIsFinishing(false);
+    }
   };
 
   const handleOpenTransferModal = () => {
@@ -240,7 +251,7 @@ export const HostDashboardScreen: React.FC = () => {
           </div>
 
           <button
-            onClick={handleFinishGame}
+            onClick={() => setIsCompleteModalOpen(true)}
             className="w-full py-2.5 px-4 rounded-xl bg-slate-800/60 text-slate-400 font-semibold text-xs border border-slate-800 hover:bg-slate-800 hover:text-slate-200 transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
@@ -279,6 +290,14 @@ export const HostDashboardScreen: React.FC = () => {
           players={otherPlayers}
           onSelectNewHost={handleSelectNewHost}
           isTransferring={isTransferring}
+        />
+
+        {/* Complete Game Confirmation Modal */}
+        <CompleteGameModal
+          isOpen={isCompleteModalOpen}
+          onClose={() => setIsCompleteModalOpen(false)}
+          onConfirm={handleFinishGame}
+          isFinishing={isFinishing}
         />
       </div>
     </MobileContainer>
