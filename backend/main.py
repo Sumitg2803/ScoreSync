@@ -356,7 +356,7 @@ async def complete_game(game_id: str, x_host_token: Optional[str] = Header(None)
 
 @app.post("/api/games/{game_id}/play-again")
 async def play_again(game_id: str, x_host_token: Optional[str] = Header(None)):
-    """Reverts game back to waiting room, clears rounds, retains existing players"""
+    """Reverts game back to waiting room, clears rounds, retains only the host and currently active connected players"""
     game_dict = await verify_host_token(game_id.upper(), x_host_token)
     db = get_database()
 
@@ -366,6 +366,10 @@ async def play_again(game_id: str, x_host_token: Optional[str] = Header(None)):
     game.completed_at = None
     game.audit_history = []
     game.last_activity_at = datetime.utcnow().isoformat()
+
+    # Retain the host, and filter players who are currently connected
+    active_players = [p for p in game.players if p.id == game.host_id or p.connected]
+    game.players = active_players
 
     await db.games.update_one({"id": game.id}, {"$set": game.dict()})
 

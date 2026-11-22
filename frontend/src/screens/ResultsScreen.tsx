@@ -11,6 +11,7 @@ export const ResultsScreen: React.FC = () => {
   const isHost = useGameStore((state) => state.isHost);
   const getRankings = useGameStore((state) => state.getRankings);
   const playAgain = useGameStore((state) => state.playAgain);
+  const leaveGame = useGameStore((state) => state.leaveGame);
   const resetCurrentGame = useGameStore((state) => state.resetCurrentGame);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
 
@@ -64,7 +65,11 @@ export const ResultsScreen: React.FC = () => {
   };
 
   const handleHome = async () => {
-    await resetCurrentGame();
+    if (isHost) {
+      await resetCurrentGame();
+    } else {
+      await leaveGame();
+    }
     navigate('/');
   };
 
