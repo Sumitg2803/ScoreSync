@@ -1,3 +1,12 @@
+export function getOrCreateDeviceToken(): string {
+  let token = localStorage.getItem('scoresync_device_token');
+  if (!token) {
+    token = 'dev_' + Math.random().toString(36).substring(2, 12) + Date.now().toString(36);
+    localStorage.setItem('scoresync_device_token', token);
+  }
+  return token;
+}
+
 const API_BASE = window.location.origin.includes('localhost:5173')
   ? 'http://localhost:8000'
   : window.location.origin;

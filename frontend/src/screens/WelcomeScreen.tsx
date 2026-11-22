@@ -1,12 +1,32 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { TrophyIllustration, GameControllerAccent } from '../components/Illustrations';
+import { useGameStore } from '../store/useGameStore';
 import { ArrowRight, QrCode } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
+  const currentGame = useGameStore((state) => state.currentGame);
+  const isHost = useGameStore((state) => state.isHost);
+  const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+
+  // Persistent Device Lock: Auto-resume active game immediately
+  useEffect(() => {
+    if (currentGame && currentGame.id) {
+      connectWebSocket(currentGame.id);
+      if (currentGame.status === 'in_progress') {
+        if (isHost) {
+          navigate(`/host-dashboard/${currentGame.id}`, { replace: true });
+        } else {
+          navigate(`/leaderboard/${currentGame.id}`, { replace: true });
+        }
+      } else if (currentGame.status === 'waiting') {
+        navigate(`/lobby/${currentGame.id}`, { replace: true });
+      }
+    }
+  }, [currentGame, isHost, connectWebSocket, navigate]);
 
   return (
     <MobileContainer>

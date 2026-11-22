@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { useGameStore } from '../store/useGameStore';
@@ -9,7 +9,26 @@ import { QrScannerModal } from '../components/QrScannerModal';
 export const JoinGameScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const currentGame = useGameStore((state) => state.currentGame);
+  const isHost = useGameStore((state) => state.isHost);
   const joinGame = useGameStore((state) => state.joinGame);
+  const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+
+  // Persistent Device Lock: If device is already part of this game, skip joining!
+  useEffect(() => {
+    if (currentGame && currentGame.id && (!id || id.toUpperCase() === currentGame.id.toUpperCase())) {
+      connectWebSocket(currentGame.id);
+      if (currentGame.status === 'in_progress') {
+        if (isHost) {
+          navigate(`/host-dashboard/${currentGame.id}`, { replace: true });
+        } else {
+          navigate(`/leaderboard/${currentGame.id}`, { replace: true });
+        }
+      } else if (currentGame.status === 'waiting') {
+        navigate(`/lobby/${currentGame.id}`, { replace: true });
+      }
+    }
+  }, [currentGame, id, isHost, connectWebSocket, navigate]);
 
   const [gameId, setGameId] = useState(id || '');
   const [playerName, setPlayerName] = useState('');

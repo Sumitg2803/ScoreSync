@@ -11,6 +11,7 @@ class PlayerModel(BaseModel):
     connected: bool = True
     joined_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     joined_at_round: int = 1  # tracks which round the player joined in
+    device_token: Optional[str] = None  # Persistent device lock token
 
 class RoundModel(BaseModel):
     round_number: int
@@ -48,6 +49,7 @@ class CreateGameRequest(BaseModel):
 
 class JoinGameRequest(BaseModel):
     player_name: str
+    device_token: Optional[str] = None
 
 class AddRoundRequest(BaseModel):
     scores: Dict[str, float]

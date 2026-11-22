@@ -193,29 +193,35 @@ async def join_game(game_id: str, req: JoinGameRequest):
 
     game = GameModel(**game_dict)
 
-    # If game admission is locked (Host is currently typing scores)
-    if game.admission_locked:
-        raise HTTPException(
-            status_code=423,
-            detail="Host is entering scores right now. Please wait a moment until the new round starts!"
-        )
+    # 1. Check if this device is ALREADY in this game (Persistent Device Lock Reconnect)
+    device_token = req.device_token or f"dev_{secrets.token_hex(12)}"
+    existing_device_player = next((p for p in game.players if p.device_token and p.device_token == device_token), None)
+    
+    # 2. Check by player name if device_token is new
+    existing_name_player = next((p for p in game.players if p.name.strip().lower() == req.player_name.strip().lower()), None)
 
-    # Check if player name already in room
-    existing_player = next((p for p in game.players if p.name.strip().lower() == req.player_name.strip().lower()), None)
+    existing_player = existing_device_player or existing_name_player
     current_round = len(game.rounds) + 1
     
     if existing_player:
-        # Re-attach existing player session
         player_id = existing_player.id
         existing_player.connected = True
+        existing_player.device_token = device_token
         player_name = existing_player.name
     else:
+        # If admission is locked because Host is typing scores right now
+        if game.admission_locked:
+            raise HTTPException(
+                status_code=423,
+                detail="Host is entering scores right now. Please wait a moment until the new round starts!"
+            )
         player_id = f"p_{secrets.token_hex(4)}"
         new_player = PlayerModel(
             id=player_id,
             name=req.player_name.strip(),
             connected=True,
-            joined_at_round=current_round
+            joined_at_round=current_round,
+            device_token=device_token
         )
         game.players.append(new_player)
         player_name = new_player.name
@@ -227,7 +233,7 @@ async def join_game(game_id: str, req: JoinGameRequest):
     del game_res["host_token"]
     game_res["leaderboard"] = calculate_leaderboard(game)
 
-    # Broadcast player joined update via WebSocket with toast metadata
+    # Broadcast player joined update via WebSocket with toast metadata (only if newly added or reconnected)
     await manager.broadcast_game_update(
         game.id,
         "PLAYER_JOINED",
@@ -241,6 +247,7 @@ async def join_game(game_id: str, req: JoinGameRequest):
 
     return {
         "player_id": player_id,
+        "device_token": device_token,
         "game": game_res
     }
 

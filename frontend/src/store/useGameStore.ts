@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { GameState, ScoringRule, Player, PlayerRanking } from '../types/game';
-import { apiRequest, WS_BASE } from '../services/api';
+import { apiRequest, WS_BASE, getOrCreateDeviceToken } from '../services/api';
 
 interface GameStore {
   currentGame: GameState | null;
@@ -85,9 +85,10 @@ export const useGameStore = create<GameStore>()(
       },
 
       joinGame: async (gameId: string, playerName: string) => {
+        const deviceToken = getOrCreateDeviceToken();
         const data = await apiRequest(`/api/games/${gameId.toUpperCase()}/join`, {
           method: 'POST',
-          body: JSON.stringify({ player_name: playerName }),
+          body: JSON.stringify({ player_name: playerName, device_token: deviceToken }),
         });
 
         const player = data.game.players.find((p: Player) => p.id === data.player_id);
@@ -112,6 +113,7 @@ export const useGameStore = create<GameStore>()(
             // ignore
           }
         }
+        localStorage.removeItem('scoresync_device_token');
         get().disconnectWebSocket();
         set({ currentGame: null, currentPlayerId: null, isHost: false });
       },
