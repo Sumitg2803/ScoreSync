@@ -1,0 +1,184 @@
+import React, { useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { MobileContainer } from '../components/MobileContainer';
+import { useGameStore } from '../store/useGameStore';
+import { ArrowLeft, ArrowRight, User, QrCode } from 'lucide-react';
+import { GameControllerAccent } from '../components/Illustrations';
+import { QrScannerModal } from '../components/QrScannerModal';
+
+export const JoinGameScreen: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const joinGame = useGameStore((state) => state.joinGame);
+
+  const [gameId, setGameId] = useState(id || '');
+  const [playerName, setPlayerName] = useState('');
+  const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isWaitingForHost, setIsWaitingForHost] = useState(false);
+
+  const handleScanSuccess = (decodedText: string) => {
+    setIsScannerOpen(false);
+    let code = decodedText.trim();
+    if (code.includes('/join/')) {
+      code = code.split('/join/').pop()?.substring(0, 6) || code;
+    } else if (code.includes('/')) {
+      code = code.split('/').pop()?.substring(0, 6) || code;
+    }
+    setGameId(code.toUpperCase());
+  };
+
+  const handleJoin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!playerName.trim()) {
+      setError('Please enter your name');
+      return;
+    }
+    const targetCode = gameId.trim().toUpperCase() || 'A7K9D2';
+    try {
+      setIsLoading(true);
+      setError('');
+      await joinGame(targetCode, playerName.trim());
+      navigate(`/lobby/${targetCode}`);
+    } catch (err: any) {
+      if (err.message && err.message.includes('Host is entering scores')) {
+        setIsWaitingForHost(true);
+      } else {
+        setError(err.message || 'Game code not found or error joining');
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // If waiting for host admission lock to lift, auto-retry every 2.5s
+  React.useEffect(() => {
+    if (!isWaitingForHost) return;
+    const interval = setInterval(async () => {
+      const targetCode = gameId.trim().toUpperCase() || 'A7K9D2';
+      try {
+        await joinGame(targetCode, playerName.trim());
+        setIsWaitingForHost(false);
+        navigate(`/lobby/${targetCode}`);
+      } catch (err: any) {
+        if (!err.message?.includes('Host is entering scores')) {
+          setIsWaitingForHost(false);
+          setError(err.message);
+        }
+      }
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [isWaitingForHost, gameId, playerName, joinGame, navigate]);
+
+  return (
+    <MobileContainer>
+      <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8 relative">
+        {/* Top Header */}
+        <div>
+          <button
+            onClick={() => navigate('/')}
+            className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-white/60 transition cursor-pointer"
+          >
+            <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
+          </button>
+
+          <div className="mt-4 mb-8">
+            <h1 className="text-2xl font-bold text-[#1E1B4B]">Join Game</h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">Enter your name to join...</p>
+          </div>
+
+          {/* Waiting for Host Admission Banner */}
+          {isWaitingForHost && (
+            <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold flex items-center gap-2.5 my-4 animate-pulse">
+              <span className="text-lg">⏳</span>
+              <span>Host is entering scores right now. You will automatically join as soon as the new round starts!</span>
+            </div>
+          )}
+
+          {/* Form */}
+          <form onSubmit={handleJoin} className="space-y-4">
+            {/* If no ID in URL, ask for Game ID */}
+            {!id && (
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                  Game Code
+                </label>
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={gameId}
+                  onChange={(e) => setGameId(e.target.value.toUpperCase())}
+                  placeholder="e.g. A7K9D2"
+                  className="w-full bg-white px-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-bold tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs uppercase"
+                />
+              </div>
+            )}
+
+            {/* Name Input */}
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                Your Name
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-4 text-slate-400">
+                  <User className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <input
+                  type="text"
+                  value={playerName}
+                  onChange={(e) => {
+                    setPlayerName(e.target.value);
+                    if (error) setError('');
+                  }}
+                  placeholder="Your Name"
+                  className="w-full bg-white pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-semibold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs"
+                />
+              </div>
+              {error && <p className="text-xs text-rose-500 font-semibold mt-1.5 ml-1">{error}</p>}
+            </div>
+
+            {/* Submit CTA */}
+            <div className="pt-2">
+              <button
+                type="submit"
+                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <span>Join Game</span>
+                <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
+              </button>
+            </div>
+          </form>
+
+          {/* Or Divider & QR Scanner */}
+          <div className="my-6 flex items-center justify-center relative">
+            <div className="w-full border-t border-slate-200" />
+            <span className="bg-[#F8F9FE] px-3 text-xs text-slate-400 font-semibold uppercase absolute">or</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsScannerOpen(true)}
+            className="w-full py-3.5 px-6 rounded-2xl bg-white text-slate-700 font-semibold text-sm shadow-xs border border-slate-200/80 hover:bg-slate-50 transition flex items-center justify-center gap-2.5 cursor-pointer"
+          >
+            <QrCode className="w-4 h-4 text-indigo-600" />
+            <span>Scan QR Code</span>
+          </button>
+        </div>
+
+        {/* QR Scanner Camera Modal */}
+        <QrScannerModal
+          isOpen={isScannerOpen}
+          onClose={() => setIsScannerOpen(false)}
+          onScanSuccess={handleScanSuccess}
+        />
+
+        {/* Bottom Accent */}
+        <div className="relative">
+          <GameControllerAccent className="absolute -bottom-4 right-0" />
+        </div>
+      </div>
+    </MobileContainer>
+  );
+};
