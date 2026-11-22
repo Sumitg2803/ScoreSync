@@ -254,8 +254,55 @@ async def lock_admission(game_id: str, lock: bool, x_host_token: Optional[str] =
     await db.games.update_one({"id": game.id}, {"$set": {"admission_locked": lock}})
     return {"admission_locked": lock}
 
-@app.post("/api/games/{game_id}/leave")
-async def leave_game(game_id: str, player_id: str):
+@app.post("/api/games/{game_id}/transfer-host")
+async def transfer_host(game_id: str, new_host_id: str, x_host_token: Optional[str] = Header(None)):
+    """Transfers host ownership to a chosen player and removes the previous host"""
+    game_dict = await verify_host_token(game_id.upper(), x_host_token)
+    db = get_database()
+    game = GameModel(**game_dict)
+
+    old_host = next((p for p in game.players if p.id == game.host_id), None)
+    new_host = next((p for p in game.players if p.id == new_host_id), None)
+    if not new_host:
+        raise HTTPException(status_code=400, detail="Selected player not found in this game")
+
+    old_host_name = old_host.name if old_host else "Previous Host"
+    new_host_name = new_host.name
+
+    # Generate fresh host token for the new host
+    new_token = secrets.token_hex(16)
+    game.host_id = new_host.id
+    game.host_token = new_token
+
+    # Remove the old host from the game players list & scrub historical rounds
+    game.players = [p for p in game.players if p.id != old_host.id] if old_host else game.players
+    if old_host:
+        for r in game.rounds:
+            if old_host.id in r.scores:
+                del r.scores[old_host.id]
+
+    game.last_activity_at = datetime.utcnow().isoformat()
+    await db.games.update_one({"id": game.id}, {"$set": game.dict()})
+
+    game_res = game.dict()
+    del game_res["host_token"]
+    game_res["leaderboard"] = calculate_leaderboard(game)
+
+    # Broadcast host transfer event to all connected devices
+    await manager.broadcast_game_update(
+        game.id,
+        "HOST_TRANSFERRED",
+        game_res,
+        meta={
+            "newHostId": new_host.id,
+            "newHostToken": new_token,
+            "oldHostName": old_host_name,
+            "newHostName": new_host_name,
+            "message": f"👑 Host Transferred: {new_host_name} is now the Host! {old_host_name} has left."
+        }
+    )
+
+    return {"status": "transferred", "new_host_id": new_host.id}
     """Player exits game: removes player, deletes scores, and recalculates standings"""
     db = get_database()
     game_dict = await db.games.find_one({"id": game_id.upper()})

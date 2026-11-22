@@ -26,6 +26,7 @@ interface GameStore {
   editRound: (roundNumber: number, scores: Record<string, number>, note?: string) => Promise<void>;
   completeGame: () => Promise<void>;
   playAgain: () => Promise<void>;
+  transferHost: (newHostId: string) => Promise<void>;
   resetCurrentGame: () => Promise<void>;
   connectWebSocket: (gameId: string) => void;
   disconnectWebSocket: () => void;
@@ -168,6 +169,17 @@ export const useGameStore = create<GameStore>()(
         set({ currentGame: updated });
       },
 
+      transferHost: async (newHostId: string) => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+        await apiRequest(`/api/games/${currentGame.id}/transfer-host?new_host_id=${newHostId}`, {
+          method: 'POST',
+        });
+        localStorage.removeItem('scoresync_host_token');
+        get().disconnectWebSocket();
+        set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false });
+      },
+
       resetCurrentGame: async () => {
         const { currentGame } = get();
         if (currentGame) {
@@ -206,7 +218,17 @@ export const useGameStore = create<GameStore>()(
               return;
             }
 
-            if (data.event === 'PLAYER_JOINED' && data.meta?.message) {
+            if (data.event === 'HOST_TRANSFERRED' && data.meta) {
+              const { currentPlayerId } = get();
+              // If this device is the chosen new host, upgrade rights and persist new host token
+              if (data.meta.newHostId === currentPlayerId) {
+                localStorage.setItem('scoresync_host_token', data.meta.newHostToken);
+                set({ isHost: true, hostToken: data.meta.newHostToken });
+                window.location.href = `/host-dashboard/${data.game.id}`;
+                return;
+              }
+              get().addToast('info', data.meta.message);
+            } else if (data.event === 'PLAYER_JOINED' && data.meta?.message) {
               get().addToast('player_joined', data.meta.message);
             } else if (data.event === 'PLAYER_LEFT' && data.meta?.message) {
               get().addToast('player_left', data.meta.message);

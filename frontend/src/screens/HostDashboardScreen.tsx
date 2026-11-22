@@ -6,8 +6,9 @@ import { Avatar } from '../components/Avatar';
 import { AddRoundSheet } from '../components/AddRoundSheet';
 import { EditRoundSheet } from '../components/EditRoundSheet';
 import { GameCodeModal } from '../components/GameCodeModal';
+import { TransferHostModal } from '../components/TransferHostModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode } from 'lucide-react';
+import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut } from 'lucide-react';
 
 export const HostDashboardScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -18,6 +19,7 @@ export const HostDashboardScreen: React.FC = () => {
   const addRound = useGameStore((state) => state.addRound);
   const editRound = useGameStore((state) => state.editRound);
   const completeGame = useGameStore((state) => state.completeGame);
+  const transferHost = useGameStore((state) => state.transferHost);
   const setAdmissionLock = useGameStore((state) => state.setAdmissionLock);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
   const toasts = useGameStore((state) => state.toasts);
@@ -25,6 +27,8 @@ export const HostDashboardScreen: React.FC = () => {
   const [isAddSheetOpen, setIsAddSheetOpen] = useState(false);
   const [isEditSheetOpen, setIsEditSheetOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [isTransferring, setIsTransferring] = useState(false);
 
   const gameId = id || currentGame?.id || 'A7K9D2';
 
@@ -70,9 +74,36 @@ export const HostDashboardScreen: React.FC = () => {
     await editRound(roundNumber, scores, note);
   };
 
+  const otherPlayers = (currentGame?.players || []).filter(
+    (p) => p.id !== (currentGame?.hostId || (currentGame as any)?.host_id)
+  );
+
   const handleFinishGame = async () => {
     await completeGame();
     navigate(`/results/${gameId}`);
+  };
+
+  const handleOpenTransferModal = () => {
+    if (otherPlayers.length === 0) {
+      if (confirm('No other players are currently in the room. Exiting will finish this game. Proceed?')) {
+        handleFinishGame();
+      }
+      return;
+    }
+    setIsTransferModalOpen(true);
+  };
+
+  const handleSelectNewHost = async (newHostId: string) => {
+    try {
+      setIsTransferring(true);
+      await transferHost(newHostId);
+      setIsTransferModalOpen(false);
+      navigate('/');
+    } catch (err: any) {
+      alert(err.message || 'Failed to transfer host');
+    } finally {
+      setIsTransferring(false);
+    }
   };
 
   return (
@@ -96,6 +127,16 @@ export const HostDashboardScreen: React.FC = () => {
               >
                 <span>{gameId}</span>
                 <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+              </button>
+
+              {/* Host Exit Button */}
+              <button
+                onClick={handleOpenTransferModal}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-950/60 border border-rose-800/60 text-rose-300 text-xs font-bold hover:bg-rose-900/60 transition cursor-pointer"
+                title="Transfer Host & Exit"
+              >
+                <LogOut className="w-3 h-3 text-rose-400" />
+                <span>Exit</span>
               </button>
 
               <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40">
@@ -229,6 +270,15 @@ export const HostDashboardScreen: React.FC = () => {
           isOpen={isQrModalOpen}
           onClose={() => setIsQrModalOpen(false)}
           gameId={gameId}
+        />
+
+        {/* Transfer Host Modal */}
+        <TransferHostModal
+          isOpen={isTransferModalOpen}
+          onClose={() => setIsTransferModalOpen(false)}
+          players={otherPlayers}
+          onSelectNewHost={handleSelectNewHost}
+          isTransferring={isTransferring}
         />
       </div>
     </MobileContainer>
