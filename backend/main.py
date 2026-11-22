@@ -82,9 +82,9 @@ async def verify_host_token(game_id: str, x_host_token: Optional[str] = Header(N
 
 # ----------------- API Endpoints -----------------
 
-@app.api_route("/health", methods=["GET", "HEAD"])
+@app.api_route("/health", methods=["GET", "HEAD", "OPTIONS"])
 async def health_check():
-    """UptimeRobot ping target to keep Render alive 24/7 (supports GET and HEAD)"""
+    """UptimeRobot ping target to keep Render alive 24/7 (supports GET, HEAD, OPTIONS)"""
     return {"status": "healthy", "service": "ScoreSync", "timestamp": datetime.utcnow().isoformat()}
 
 @app.post("/api/games/create")
@@ -408,7 +408,7 @@ frontend_dist = Path(__file__).resolve().parent.parent / "frontend" / "dist"
 if frontend_dist.exists():
     app.mount("/assets", StaticFiles(directory=str(frontend_dist / "assets")), name="assets")
 
-    @app.get("/{full_path:path}")
+    @app.api_route("/{full_path:path}", methods=["GET", "HEAD", "OPTIONS"])
     async def serve_react_app(full_path: str):
         # Don't intercept API or WS routes
         if full_path.startswith("api") or full_path.startswith("ws"):
