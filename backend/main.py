@@ -303,6 +303,9 @@ async def transfer_host(game_id: str, new_host_id: str, x_host_token: Optional[s
     )
 
     return {"status": "transferred", "new_host_id": new_host.id}
+
+@app.post("/api/games/{game_id}/leave")
+async def leave_game(game_id: str, player_id: str):
     """Player exits game: removes player, deletes scores, and recalculates standings"""
     db = get_database()
     game_dict = await db.games.find_one({"id": game_id.upper()})
