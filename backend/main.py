@@ -82,9 +82,9 @@ async def verify_host_token(game_id: str, x_host_token: Optional[str] = Header(N
 
 # ----------------- API Endpoints -----------------
 
-@app.get("/health")
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health_check():
-    """UptimeRobot ping target to keep Render alive 24/7"""
+    """UptimeRobot ping target to keep Render alive 24/7 (supports GET and HEAD)"""
     return {"status": "healthy", "service": "ScoreSync", "timestamp": datetime.utcnow().isoformat()}
 
 @app.post("/api/games/create")
