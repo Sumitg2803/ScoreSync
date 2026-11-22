@@ -70,7 +70,45 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
-# Helper to verify host token
+# Background Task to auto-clean games with 1 hour of inactivity
+import asyncio
+
+async def auto_clean_expired_games_loop():
+    while True:
+        try:
+            await asyncio.sleep(300)  # Check every 5 minutes
+            db = get_database()
+            now = datetime.utcnow()
+            
+            # Find all games and check expiration
+            cursor = db.games.find({})
+            async for game in cursor:
+                # 1. Completed games inactive for > 1 hour
+                if game.get("status") == "completed" and game.get("completed_at"):
+                    try:
+                        completed_dt = datetime.fromisoformat(game["completed_at"])
+                        if now - completed_dt > timedelta(hours=1):
+                            await db.games.delete_one({"id": game["id"]})
+                            continue
+                    except Exception:
+                        pass
+                
+                # 2. Abandoned games (waiting/in_progress with no activity for > 2 hours)
+                last_act = game.get("last_activity_at") or game.get("created_at")
+                if last_act:
+                    try:
+                        act_dt = datetime.fromisoformat(last_act)
+                        if now - act_dt > timedelta(hours=2):
+                            await db.games.delete_one({"id": game["id"]})
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+@app.on_event("startup")
+async def startup_event():
+    # Start auto-cleanup worker in background
+    asyncio.create_task(auto_clean_expired_games_loop())
 async def verify_host_token(game_id: str, x_host_token: Optional[str] = Header(None)):
     db = get_database()
     game = await db.games.find_one({"id": game_id})
