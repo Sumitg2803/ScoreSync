@@ -4,8 +4,9 @@ import { MobileContainer } from '../components/MobileContainer';
 import { useGameStore } from '../store/useGameStore';
 import { Avatar } from '../components/Avatar';
 import { CancelGameModal } from '../components/CancelGameModal';
+import { HostSettingsModal } from '../components/HostSettingsModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { ArrowLeft, Play, Copy, Check, Users, Eye } from 'lucide-react';
+import { ArrowLeft, Play, Copy, Check, Users, Eye, Settings, Lock } from 'lucide-react';
 
 export const WaitingRoomScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -17,10 +18,16 @@ export const WaitingRoomScreen: React.FC = () => {
   const startGame = useGameStore((state) => state.startGame);
   const leaveGame = useGameStore((state) => state.leaveGame);
   const resetCurrentGame = useGameStore((state) => state.resetCurrentGame);
+  const updateAccessSettings = useGameStore((state) => state.updateAccessSettings);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
   const toasts = useGameStore((state) => state.toasts);
 
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+  const allowPlayers = currentGame?.allow_players ?? true;
+  const allowViewers = currentGame?.allow_viewers ?? true;
+  const isRoomLocked = !allowPlayers && !allowViewers;
 
   const gameId = id || currentGame?.id || 'A7K9D2';
   const players = currentGame?.players || [];
@@ -79,15 +86,27 @@ export const WaitingRoomScreen: React.FC = () => {
               <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
             </button>
 
-            {spectatorCount > 0 && (
-              <div
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
-                title="Live Viewers"
-              >
-                <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
-                <span>{spectatorCount}</span>
-              </div>
-            )}
+            <div className="flex items-center gap-2">
+              {isHost && (
+                <button
+                  onClick={() => setIsSettingsModalOpen(true)}
+                  className="p-2 rounded-xl bg-white shadow-xs border border-slate-200 text-slate-600 hover:text-indigo-600 transition cursor-pointer"
+                  title="Room Privacy & Access Settings"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+              )}
+
+              {spectatorCount > 0 && (
+                <div
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+                  title="Live Viewers"
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+                  <span>{spectatorCount}</span>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="text-center mt-1 mb-6">
@@ -121,20 +140,35 @@ export const WaitingRoomScreen: React.FC = () => {
 
         {/* Bottom Game ID & Host Start CTA */}
         <div className="space-y-4 pt-4">
-          {/* Game ID Badge with Copy */}
-          <div className="flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-slate-200/80 shadow-xs">
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Game ID</span>
-              <span className="text-base font-black tracking-widest text-[#1E1B4B]">{gameId}</span>
+          {/* Game ID Badge with Copy (Disabled if room locked) */}
+          {isRoomLocked ? (
+            <div className="flex items-center justify-between bg-amber-50 px-5 py-3 rounded-2xl border border-amber-200/80 shadow-xs">
+              <div className="flex items-center gap-2.5">
+                <Lock className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Game Code</span>
+                  <span className="text-xs font-bold text-amber-900">Room Locked • Entries Disabled</span>
+                </div>
+              </div>
+              <span className="text-[10px] font-black uppercase text-amber-700 px-2 py-0.5 rounded-md bg-amber-200/60">
+                Private
+              </span>
             </div>
-            <button
-              onClick={handleCopyId}
-              className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
-              title="Copy Game ID"
-            >
-              {copied ? <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" /> : <Copy className="w-4 h-4" />}
-            </button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between bg-white px-5 py-3 rounded-2xl border border-slate-200/80 shadow-xs">
+              <div>
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Game ID</span>
+                <span className="text-base font-black tracking-widest text-[#1E1B4B]">{gameId}</span>
+              </div>
+              <button
+                onClick={handleCopyId}
+                className="p-2 rounded-xl text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                title="Copy Game ID"
+              >
+                {copied ? <Check className="w-4 h-4 text-emerald-600 stroke-[2.5]" /> : <Copy className="w-4 h-4" />}
+              </button>
+            </div>
+          )}
 
           {/* Start Game CTA - ONLY VISIBLE TO HOST */}
           {isHost ? (
@@ -159,6 +193,15 @@ export const WaitingRoomScreen: React.FC = () => {
           onClose={() => setIsCancelModalOpen(false)}
           onConfirm={handleConfirmExit}
           isHost={isHost}
+        />
+
+        {/* Room Privacy & Admission Settings Modal */}
+        <HostSettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          allowPlayers={allowPlayers}
+          allowViewers={allowViewers}
+          onUpdate={updateAccessSettings}
         />
       </div>
     </MobileContainer>

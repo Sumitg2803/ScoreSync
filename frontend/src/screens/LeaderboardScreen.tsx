@@ -6,7 +6,7 @@ import { TrophyIllustration } from '../components/Illustrations';
 import { GameCodeModal } from '../components/GameCodeModal';
 import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { ArrowLeft, Crown, BarChart3, QrCode, LogOut, Eye } from 'lucide-react';
+import { ArrowLeft, Crown, BarChart3, QrCode, LogOut, Eye, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const LeaderboardScreen: React.FC = () => {
@@ -29,6 +29,7 @@ export const LeaderboardScreen: React.FC = () => {
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
 
   const gameId = id || currentGame?.id || 'A7K9D2';
+  const isRoomLocked = currentGame?.allow_players === false && currentGame?.allow_viewers === false;
 
   React.useEffect(() => {
     if (gameId) {
@@ -60,13 +61,23 @@ export const LeaderboardScreen: React.FC = () => {
         <div className="flex-1 flex flex-col justify-between p-6 pt-10 pb-8 relative">
           {/* Top Status & Controls */}
           <div className="flex items-center justify-between">
-            <button
-              onClick={() => setIsQrModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
-            >
-              <span>{gameId}</span>
-              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-            </button>
+            {isRoomLocked ? (
+              <div
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold"
+                title="Room Locked - New entries closed"
+              >
+                <Lock className="w-3.5 h-3.5 text-amber-600" />
+                <span>Room Locked</span>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsQrModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+              >
+                <span>{gameId}</span>
+                <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+              </button>
+            )}
 
             <div className="flex items-center gap-1.5">
               {spectatorCount > 0 && (
@@ -171,14 +182,24 @@ export const LeaderboardScreen: React.FC = () => {
             </button>
 
             <div className="flex items-center gap-1.5">
-              {/* Corner Game ID & QR button */}
-              <button
-                onClick={() => setIsQrModalOpen(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
-              >
-                <span>{gameId}</span>
-                <QrCode className="w-3.5 h-3.5 text-indigo-600" />
-              </button>
+              {/* Corner Game ID & QR button (Locked when both restricted) */}
+              {isRoomLocked ? (
+                <div
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs font-bold"
+                  title="Room Locked - New entries closed"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-600" />
+                  <span>Locked</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                >
+                  <span>{gameId}</span>
+                  <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+                </button>
+              )}
 
               {/* Live Eye Counter (Only shown when viewers are watching) */}
               {spectatorCount > 0 && (

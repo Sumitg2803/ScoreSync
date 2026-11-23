@@ -21,6 +21,8 @@ import {
   Flame,
   CheckCircle2,
   Eye,
+  Settings,
+  Lock,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -293,6 +295,30 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                     Tap <strong>"Complete Game"</strong> (with a comedy safeguard against misclicks) to reveal final champion standings with confetti. Tap <strong>"Play Again"</strong> to jump all connected friends straight back to the lobby for match #2, or <strong>"Home"</strong> to safely conclude the night.
                   </p>
                 </div>
+
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1.5">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <Settings className="w-4 h-4 text-indigo-600" />
+                    <span>7. Room Privacy & Admission Control</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 leading-relaxed pl-6 space-y-1">
+                    <p>
+                      <strong>How to Open:</strong> Tap the Settings gear icon (⚙️) in the top header of the Host Dashboard.
+                    </p>
+                    <p>
+                      <strong>Two Master Switches:</strong><br />
+                      • 🎮 <strong>Allow Players:</strong> Turn on/off whether new players can join the match and get scored.<br />
+                      • 👀 <strong>Allow Viewers:</strong> Turn on/off whether audience can tune in as spectators.
+                    </p>
+                    <p>
+                      <strong>What Happens When You Change Settings:</strong><br />
+                      • 🟢 <strong>Both ON (Open):</strong> Anyone can choose to play or watch.<br />
+                      • 🎮 <strong>Players Only:</strong> Spectator entry is blocked. Scanning the QR code goes straight to player name entry.<br />
+                      • 👀 <strong>Audience Only:</strong> Player entry is closed. Scanning the QR code connects users as spectators.<br />
+                      • 🔒 <strong>Lock Room (Both OFF):</strong> Complete privacy lock. The Game Code and QR Code are disabled on every connected phone (Host, Players, and Viewers), blocking all new entries.
+                    </p>
+                  </div>
+                </div>
               </>
             )}
 
@@ -359,6 +385,18 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
                     If you must drop out mid-game, tapping <strong>"Exit"</strong> gives a confirmation and scrubs your entry. When the game ends naturally, your final rank remains celebrated on the podium even if you tap <strong>"Home"</strong>.
                   </p>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <Lock className="w-4 h-4 text-amber-500" />
+                    <span>6. What if Host Closed Player Entry?</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 leading-relaxed pl-6 space-y-1">
+                    <p>• If the host turns off player admission, ScoreSync will not allow new players to join.</p>
+                    <p>• If audience mode is open, you can still watch the live match as a viewer (👀).</p>
+                    <p>• If the host locks the room completely, existing players continue playing with zero interruption, but no new players can join.</p>
+                  </div>
                 </div>
               </>
             )}
@@ -432,6 +470,19 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
                     When the final leaderboard ends and the host taps <em>"Play Again"</em>, players return to the waiting lobby, while viewers see a holding screen: <em>"Game is not over yet, stay connected while next game start"</em>. The moment the host starts the next match, your screen snaps right back to live scoring!
                   </p>
+                </div>
+
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <ShieldAlert className="w-4 h-4 text-purple-600" />
+                    <span>6. Host Audience Permissions</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 leading-relaxed pl-6 space-y-1">
+                    <p>• Audience access is controlled in real-time by the host.</p>
+                    <p>• If the host sets <strong>Players Only</strong>, ScoreSync will not allow audience entry. You can join as a player (🎮) if player entry is open.</p>
+                    <p>• If the host sets <strong>Viewers Only</strong>, scanning the QR code connects you directly as a spectator.</p>
+                    <p>• If the host locks the room, existing connected viewers continue watching uninterrupted, but no new viewers can join.</p>
+                  </div>
                 </div>
               </>
             )}

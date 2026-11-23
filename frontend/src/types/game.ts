@@ -32,6 +32,8 @@ export interface GameState {
   createdAt: string;
   completedAt?: string;
   admission_locked?: boolean;
+  allow_players?: boolean;
+  allow_viewers?: boolean;
   spectators?: string[];
   spectator_count?: number;
   players: Player[];

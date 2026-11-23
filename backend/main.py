@@ -15,7 +15,7 @@ from fastapi.responses import FileResponse
 from .models import (
     GameModel, PlayerModel, RoundModel, AuditEditModel,
     CreateGameRequest, JoinGameRequest, AddRoundRequest, EditRoundRequest,
-    JoinSpectatorRequest
+    JoinSpectatorRequest, UpdateAccessSettingsRequest
 )
 from .database import get_database
 from .scoring import calculate_leaderboard
@@ -211,6 +211,18 @@ async def join_game(game_id: str, req: JoinGameRequest):
         existing_player.device_token = device_token
         player_name = existing_player.name
     else:
+        # Check host admission permission for players
+        if not game.allow_players:
+            if not game.allow_viewers:
+                raise HTTPException(
+                    status_code=403,
+                    detail="Game room is locked. Host has closed all new entries."
+                )
+            raise HTTPException(
+                status_code=403,
+                detail="Host has closed entry for new players."
+            )
+
         # If admission is locked because Host is typing scores right now
         if game.admission_locked:
             raise HTTPException(
@@ -262,6 +274,18 @@ async def join_spectator(game_id: str, req: JoinSpectatorRequest):
         raise HTTPException(status_code=404, detail="Game not found")
 
     game = GameModel(**game_dict)
+    # Check host permission for audience/spectators
+    if not game.allow_viewers:
+        if not game.allow_players:
+            raise HTTPException(
+                status_code=403,
+                detail="Game room is locked. Host has closed all new entries."
+            )
+        raise HTTPException(
+            status_code=403,
+            detail="Host has restricted audience entry for this game."
+        )
+
     if game.status == "waiting":
         raise HTTPException(
             status_code=400,
@@ -326,6 +350,42 @@ async def leave_spectator(game_id: str, device_token: Optional[str] = None):
             meta={"spectator_count": len(game.spectators)}
         )
     return {"status": "ok", "spectator_count": len(game.spectators)}
+
+@app.post("/api/games/{game_id}/access-settings")
+async def update_access_settings(game_id: str, req: UpdateAccessSettingsRequest, x_host_token: Optional[str] = Header(None)):
+    """Host updates room admission permissions (allow_players, allow_viewers)"""
+    game_dict = await verify_host_token(game_id.upper(), x_host_token)
+    db = get_database()
+    game = GameModel(**game_dict)
+    game.allow_players = req.allow_players
+    game.allow_viewers = req.allow_viewers
+    game.last_activity_at = datetime.utcnow().isoformat()
+
+    await db.games.update_one(
+        {"id": game.id},
+        {"$set": {
+            "allow_players": game.allow_players,
+            "allow_viewers": game.allow_viewers,
+            "last_activity_at": game.last_activity_at
+        }}
+    )
+
+    game_res = game.dict()
+    del game_res["host_token"]
+    game_res["leaderboard"] = calculate_leaderboard(game)
+    game_res["spectator_count"] = len(game.spectators)
+
+    # Broadcast access settings change to all connected devices in the room
+    await manager.broadcast_game_update(
+        game.id,
+        "ACCESS_SETTINGS_CHANGED",
+        game_res,
+        meta={
+            "allow_players": game.allow_players,
+            "allow_viewers": game.allow_viewers
+        }
+    )
+    return game_res
 
 @app.post("/api/games/{game_id}/lock-admission")
 async def lock_admission(game_id: str, lock: bool, x_host_token: Optional[str] = Header(None)):

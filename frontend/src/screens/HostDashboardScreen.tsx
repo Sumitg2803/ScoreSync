@@ -8,8 +8,9 @@ import { EditRoundSheet } from '../components/EditRoundSheet';
 import { GameCodeModal } from '../components/GameCodeModal';
 import { TransferHostModal } from '../components/TransferHostModal';
 import { CompleteGameModal } from '../components/CompleteGameModal';
+import { HostSettingsModal } from '../components/HostSettingsModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut, Eye } from 'lucide-react';
+import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut, Eye, Settings, Lock } from 'lucide-react';
 
 export const HostDashboardScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -23,6 +24,7 @@ export const HostDashboardScreen: React.FC = () => {
   const completeGame = useGameStore((state) => state.completeGame);
   const transferHost = useGameStore((state) => state.transferHost);
   const setAdmissionLock = useGameStore((state) => state.setAdmissionLock);
+  const updateAccessSettings = useGameStore((state) => state.updateAccessSettings);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
   const toasts = useGameStore((state) => state.toasts);
 
@@ -33,6 +35,11 @@ export const HostDashboardScreen: React.FC = () => {
   const [isTransferring, setIsTransferring] = useState(false);
   const [isCompleteModalOpen, setIsCompleteModalOpen] = useState(false);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+
+  const allowPlayers = currentGame?.allow_players ?? true;
+  const allowViewers = currentGame?.allow_viewers ?? true;
+  const isRoomLocked = !allowPlayers && !allowViewers;
 
   const gameId = id || currentGame?.id || 'A7K9D2';
 
@@ -135,14 +142,33 @@ export const HostDashboardScreen: React.FC = () => {
 
             {/* Right Action Chips */}
             <div className="flex items-center gap-1.5 shrink-0">
-              {/* Corner Game ID & QR button */}
+              {/* Corner Game ID & QR button (Locked when both restricted) */}
+              {isRoomLocked ? (
+                <div
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/80 border border-amber-500/40 text-amber-300 text-xs font-bold"
+                  title="Room Locked - New entries blocked"
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Locked</span>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setIsQrModalOpen(true)}
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/90 border border-slate-700/80 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
+                  title="Show QR Code"
+                >
+                  <span>{gameId}</span>
+                  <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+                </button>
+              )}
+
+              {/* Host Settings Button (⚙️) */}
               <button
-                onClick={() => setIsQrModalOpen(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/90 border border-slate-700/80 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
-                title="Show QR Code"
+                onClick={() => setIsSettingsModalOpen(true)}
+                className="p-1.5 rounded-xl bg-slate-800/90 border border-slate-700/80 text-slate-300 hover:text-white hover:bg-slate-700 transition cursor-pointer"
+                title="Room Privacy & Admission Settings"
               >
-                <span>{gameId}</span>
-                <QrCode className="w-3.5 h-3.5 text-indigo-400" />
+                <Settings className="w-4 h-4 text-indigo-400" />
               </button>
 
               {/* Live Eye Counter (Only shown when viewers are watching) */}
@@ -315,6 +341,15 @@ export const HostDashboardScreen: React.FC = () => {
           onClose={() => setIsCompleteModalOpen(false)}
           onConfirm={handleFinishGame}
           isFinishing={isFinishing}
+        />
+
+        {/* Room Privacy & Admission Settings Modal */}
+        <HostSettingsModal
+          isOpen={isSettingsModalOpen}
+          onClose={() => setIsSettingsModalOpen(false)}
+          allowPlayers={allowPlayers}
+          allowViewers={allowViewers}
+          onUpdate={updateAccessSettings}
         />
       </div>
     </MobileContainer>

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowLeft, ArrowRight, User, QrCode, Eye, Gamepad2, Sparkles, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, User, QrCode, Eye, Gamepad2, Sparkles, X, Lock, AlertTriangle } from 'lucide-react';
 import { GameControllerAccent } from '../components/Illustrations';
 import { QrScannerModal } from '../components/QrScannerModal';
 import { apiRequest } from '../services/api';
@@ -25,6 +25,7 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
   const isSpectator = useGameStore((state) => state.isSpectator);
   const joinGame = useGameStore((state) => state.joinGame);
   const joinAsSpectator = useGameStore((state) => state.joinAsSpectator);
+  const addToast = useGameStore((state) => state.addToast);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
 
   // Persistent Device Lock: If device is already part of this game, skip joining!
@@ -65,28 +66,58 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
   const [isOngoingModalOpen, setIsOngoingModalOpen] = useState(false);
   const [detectedGameCode, setDetectedGameCode] = useState('');
 
+  // Host Access Restrictions Redirect Modal
+  const [redirectModal, setRedirectModal] = useState<{
+    isOpen: boolean;
+    type: 'player_restricted' | 'audience_restricted' | 'room_locked';
+    targetCode: string;
+  } | null>(null);
+
   // If user arrived via direct link (e.g. phone camera QR /join/:id) without explicit mode
   useEffect(() => {
     const checkDirectQrScan = async (code: string) => {
       if (!code || code.length < 6 || mode !== null) return;
       try {
         const game = await apiRequest(`/api/games/${code.toUpperCase()}`);
+        const allowP = game.allow_players ?? true;
+        const allowV = game.allow_viewers ?? true;
+
+        if (!allowP && !allowV) {
+          setRedirectModal({ isOpen: true, type: 'room_locked', targetCode: code.toUpperCase() });
+          return;
+        }
+
+        if (allowP && !allowV) {
+          setMode('player');
+          setGameId(code.toUpperCase());
+          addToast('info', 'Host has restricted access to audience. You can join as a player.');
+          return;
+        }
+
+        if (!allowP && allowV) {
+          await joinAsSpectator(code.toUpperCase());
+          addToast('info', 'Host has restricted access to join as player. You are connected as a viewer.');
+          navigate(`/leaderboard/${code.toUpperCase()}`);
+          return;
+        }
+
         if (game.status === 'in_progress') {
           setDetectedGameCode(code.toUpperCase());
           setIsOngoingModalOpen(true);
         } else {
-          // If in waiting room, audience cannot join, so default to player
           setMode('player');
         }
-      } catch {
-        // ignore
+      } catch (err: any) {
+        if (err.message?.includes('locked')) {
+          setRedirectModal({ isOpen: true, type: 'room_locked', targetCode: code.toUpperCase() });
+        }
       }
     };
 
     if (id && id.length === 6 && !mode) {
       checkDirectQrScan(id);
     }
-  }, [id, mode]);
+  }, [id, mode, addToast, joinAsSpectator, navigate]);
 
   const handleScanSuccess = async (decodedText: string) => {
     setIsScannerOpen(false);
@@ -99,38 +130,68 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
     const cleanCode = code.toUpperCase();
     setGameId(cleanCode);
 
-    // If user clicked "Join as Audience", direct join as audience on scan!
-    if (mode === 'audience') {
-      try {
+    try {
+      const game = await apiRequest(`/api/games/${cleanCode}`);
+      const allowP = game.allow_players ?? true;
+      const allowV = game.allow_viewers ?? true;
+
+      // 1. Both locked:
+      if (!allowP && !allowV) {
+        setRedirectModal({ isOpen: true, type: 'room_locked', targetCode: cleanCode });
+        return;
+      }
+
+      // If user clicked "Join as Audience", direct join as audience on scan!
+      if (mode === 'audience') {
+        if (!allowV) {
+          setRedirectModal({ isOpen: true, type: 'audience_restricted', targetCode: cleanCode });
+          return;
+        }
         setIsLoading(true);
         setError('');
         await joinAsSpectator(cleanCode);
         navigate(`/leaderboard/${cleanCode}`);
-      } catch (err: any) {
-        setError(err.message || 'Failed to join as audience');
-      } finally {
-        setIsLoading(false);
+        return;
       }
-      return;
-    }
 
-    // If user clicked "Join Game", keep player mode and let them enter name
-    if (mode === 'player') {
-      return;
-    }
+      // If user clicked "Join Game", keep player mode and let them enter name
+      if (mode === 'player') {
+        if (!allowP) {
+          setRedirectModal({ isOpen: true, type: 'player_restricted', targetCode: cleanCode });
+          return;
+        }
+        return;
+      }
 
-    // Neutral scan: check if match is ongoing and prompt user
-    try {
-      const game = await apiRequest(`/api/games/${cleanCode}`);
+      // Neutral scan from camera / generic button:
+      if (allowP && !allowV) {
+        setMode('player');
+        addToast('info', 'Host has restricted access to audience. You can join as a player.');
+        return;
+      }
+
+      if (!allowP && allowV) {
+        setIsLoading(true);
+        await joinAsSpectator(cleanCode);
+        addToast('info', 'Host has restricted access to join as player. You are connected as a viewer.');
+        navigate(`/leaderboard/${cleanCode}`);
+        return;
+      }
+
       if (game.status === 'in_progress') {
         setDetectedGameCode(cleanCode);
         setIsOngoingModalOpen(true);
       } else {
         setMode('player');
       }
-    } catch {
-      // Let manual submit handle errors
-      setMode('player');
+    } catch (err: any) {
+      if (err.message?.includes('locked')) {
+        setRedirectModal({ isOpen: true, type: 'room_locked', targetCode: cleanCode });
+      } else {
+        setError(err.message || 'Game not found');
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -149,6 +210,10 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
     } catch (err: any) {
       if (err.message && err.message.includes('Host is entering scores')) {
         setIsWaitingForHost(true);
+      } else if (err.message && err.message.includes('closed entry for new players')) {
+        setRedirectModal({ isOpen: true, type: 'player_restricted', targetCode });
+      } else if (err.message && err.message.includes('locked')) {
+        setRedirectModal({ isOpen: true, type: 'room_locked', targetCode });
       } else {
         setError(err.message || 'Game code not found or error joining');
       }
@@ -171,8 +236,14 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
       setIsOngoingModalOpen(false);
       navigate(`/leaderboard/${targetCode}`);
     } catch (err: any) {
-      setError(err.message || 'Failed to join as audience');
-      setIsOngoingModalOpen(false);
+      if (err.message && err.message.includes('restricted audience entry')) {
+        setRedirectModal({ isOpen: true, type: 'audience_restricted', targetCode });
+      } else if (err.message && err.message.includes('locked')) {
+        setRedirectModal({ isOpen: true, type: 'room_locked', targetCode });
+      } else {
+        setError(err.message || 'Failed to join as audience');
+        setIsOngoingModalOpen(false);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -427,6 +498,104 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
                   </div>
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Host Admission Restriction Redirection Modal */}
+        {redirectModal?.isOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
+            <div className="bg-white w-full max-w-sm rounded-[32px] p-6 relative flex flex-col shadow-2xl border border-slate-100 text-center items-center">
+              {redirectModal.type === 'room_locked' ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center mb-3">
+                    <Lock className="w-6 h-6 stroke-[2.2]" />
+                  </div>
+                  <h3 className="font-extrabold text-lg text-[#1E1B4B] mb-1">Game Room Locked</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
+                    The host has locked this game room. No new players or viewers are currently being admitted.
+                  </p>
+                  <button
+                    onClick={() => {
+                      setRedirectModal(null);
+                      navigate('/');
+                    }}
+                    className="w-full py-3.5 rounded-2xl bg-slate-900 text-white font-bold text-xs shadow-md active:scale-[0.98] transition cursor-pointer"
+                  >
+                    Back to Home
+                  </button>
+                </>
+              ) : redirectModal.type === 'player_restricted' ? (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mb-3">
+                    <Eye className="w-6 h-6 stroke-[2.2]" />
+                  </div>
+                  <h3 className="font-extrabold text-lg text-[#1E1B4B] mb-1">Player Entry Closed</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
+                    The host has closed entry for new players in this match, but you can still watch as an audience member!
+                  </p>
+                  <div className="space-y-2.5 w-full">
+                    <button
+                      onClick={async () => {
+                        const target = redirectModal.targetCode;
+                        setRedirectModal(null);
+                        try {
+                          await joinAsSpectator(target);
+                          navigate(`/leaderboard/${target}`);
+                        } catch (err: any) {
+                          setError(err.message || 'Failed to connect');
+                        }
+                      }}
+                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold text-xs shadow-md active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Eye className="w-4 h-4" />
+                      <span>Watch as Audience</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRedirectModal(null);
+                        navigate('/');
+                      }}
+                      className="w-full py-3 rounded-2xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition cursor-pointer"
+                    >
+                      Back to Home
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="w-12 h-12 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center mb-3">
+                    <Gamepad2 className="w-6 h-6 stroke-[2.2]" />
+                  </div>
+                  <h3 className="font-extrabold text-lg text-[#1E1B4B] mb-1">Audience Restricted</h3>
+                  <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
+                    The host has restricted spectator access for this match, but you can still join as a player to participate!
+                  </p>
+                  <div className="space-y-2.5 w-full">
+                    <button
+                      onClick={() => {
+                        const target = redirectModal.targetCode;
+                        setRedirectModal(null);
+                        setMode('player');
+                        setGameId(target);
+                      }}
+                      className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-xs shadow-md active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-1.5"
+                    >
+                      <Gamepad2 className="w-4 h-4" />
+                      <span>Join as Player</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setRedirectModal(null);
+                        navigate('/');
+                      }}
+                      className="w-full py-3 rounded-2xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 transition cursor-pointer"
+                    >
+                      Back to Home
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}

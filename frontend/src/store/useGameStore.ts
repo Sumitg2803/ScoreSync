@@ -24,6 +24,7 @@ interface GameStore {
   joinAsSpectator: (gameId: string) => Promise<GameState>;
   leaveGame: () => Promise<void>;
   leaveSpectator: () => Promise<void>;
+  updateAccessSettings: (allowPlayers: boolean, allowViewers: boolean) => Promise<void>;
   setAdmissionLock: (lock: boolean) => Promise<void>;
   startGame: () => Promise<void>;
   addRound: (scores: Record<string, number>, note?: string) => Promise<void>;
@@ -170,6 +171,16 @@ export const useGameStore = create<GameStore>()(
           isSpectator: false,
           spectatorCount: 0,
         });
+      },
+
+      updateAccessSettings: async (allowPlayers: boolean, allowViewers: boolean) => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+        const updated = await apiRequest(`/api/games/${currentGame.id}/access-settings`, {
+          method: 'POST',
+          body: JSON.stringify({ allow_players: allowPlayers, allow_viewers: allowViewers }),
+        });
+        set({ currentGame: updated });
       },
 
       setAdmissionLock: async (lock: boolean) => {

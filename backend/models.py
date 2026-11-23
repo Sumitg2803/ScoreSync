@@ -37,6 +37,8 @@ class GameModel(BaseModel):
     completed_at: Optional[str] = None
     last_activity_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
     admission_locked: bool = False  # True when host is actively adding or editing round scores
+    allow_players: bool = True  # True if new players can join
+    allow_viewers: bool = True  # True if audience/spectators can join
     players: List[PlayerModel] = []
     rounds: List[RoundModel] = []
     audit_history: List[AuditEditModel] = []
@@ -47,6 +49,10 @@ class CreateGameRequest(BaseModel):
     name: str
     scoring_rule: ScoringRule = "highest_wins"
     host_name: Optional[str] = "Host"
+
+class UpdateAccessSettingsRequest(BaseModel):
+    allow_players: bool
+    allow_viewers: bool
 
 class JoinGameRequest(BaseModel):
     player_name: str
