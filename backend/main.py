@@ -56,18 +56,23 @@ class ConnectionManager:
 
     async def broadcast_game_update(self, game_id: str, event_type: str, game_data: dict, meta: Optional[dict] = None):
         if game_id in self.active_rooms:
+            # Strip MongoDB _id if present to guarantee clean JSON serialization
+            clean_game_data = {k: v for k, v in game_data.items() if k != "_id"}
             message = {
                 "event": event_type,
-                "game": game_data,
+                "game": clean_game_data,
                 "meta": meta or {},
                 "timestamp": datetime.utcnow().isoformat()
             }
-            payload = json.dumps(message)
-            for connection in list(self.active_rooms[game_id]):
-                try:
-                    await connection.send_text(payload)
-                except Exception:
-                    pass
+            try:
+                payload = json.dumps(message, default=str)
+                for connection in list(self.active_rooms[game_id]):
+                    try:
+                        await connection.send_text(payload)
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"Error broadcasting game update: {e}")
 
 manager = ConnectionManager()
 
@@ -456,11 +461,17 @@ async def start_host_roulette(game_id: str, x_host_token: Optional[str] = Header
     old_host = next((p for p in game.players if p.id == game.host_id), None)
     old_host_name = old_host.name if old_host else "Host"
 
+    # Prepare clean response data
+    game_res = game.dict()
+    del game_res["host_token"]
+    game_res["leaderboard"] = calculate_leaderboard(game)
+    game_res["spectator_count"] = len(game.spectators)
+
     # Broadcast HOST_ROULETTE_STARTED to all connected devices (Host, Players, Audience)
     await manager.broadcast_game_update(
         game.id,
         "HOST_ROULETTE_STARTED",
-        game_dict,
+        game_res,
         meta={
             "candidates": [{"id": p.id, "name": p.name} for p in candidates],
             "winnerId": winner.id,
@@ -472,13 +483,16 @@ async def start_host_roulette(game_id: str, x_host_token: Optional[str] = Header
 
     # Schedule background execution of transfer after 5.2 seconds so animation finishes on all screens
     async def complete_roulette_transfer():
-        await asyncio.sleep(5.2)
-        latest = await db.games.find_one({"id": game.id})
-        if latest:
-            latest_game = GameModel(**latest)
-            w = next((p for p in latest_game.players if p.id == winner.id), None)
-            if w:
-                await perform_host_transfer(latest_game, w, db)
+        try:
+            await asyncio.sleep(5.2)
+            latest = await db.games.find_one({"id": game.id})
+            if latest:
+                latest_game = GameModel(**latest)
+                w = next((p for p in latest_game.players if p.id == winner.id), None)
+                if w:
+                    await perform_host_transfer(latest_game, w, db)
+        except Exception as e:
+            print(f"Error in complete_roulette_transfer: {e}")
 
     asyncio.create_task(complete_roulette_transfer())
 
