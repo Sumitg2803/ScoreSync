@@ -260,10 +260,12 @@ export const useGameStore = create<GameStore>()(
       },
 
       startHostRoulette: async () => {
-        const { currentGame } = get();
+        const { currentGame, hostToken } = get();
         if (!currentGame) return;
+        const token = hostToken || localStorage.getItem('scoresync_host_token');
         await apiRequest(`/api/games/${currentGame.id}/start-host-roulette`, {
           method: 'POST',
+          headers: token ? { 'X-Host-Token': token } : {},
         });
       },
 
@@ -272,11 +274,18 @@ export const useGameStore = create<GameStore>()(
       },
 
       transferHost: async (newHostId: string) => {
-        const { currentGame } = get();
+        const { currentGame, hostToken } = get();
         if (!currentGame) return;
         const gameId = currentGame.id;
+        const token = hostToken || localStorage.getItem('scoresync_host_token');
 
-        // Disconnect WebSocket immediately so incoming broadcasts don't re-pollute state
+        // 1. Send the transfer request FIRST with host credentials intact
+        await apiRequest(`/api/games/${gameId}/transfer-host?new_host_id=${newHostId}`, {
+          method: 'POST',
+          headers: token ? { 'X-Host-Token': token } : {},
+        });
+
+        // 2. ONLY upon successful API response, cleanly detach and clear host storage
         get().disconnectWebSocket();
         localStorage.removeItem('scoresync_host_token');
         localStorage.removeItem('scoresync_game_storage');
@@ -289,10 +298,6 @@ export const useGameStore = create<GameStore>()(
           spectatorCount: 0,
           hostRoulette: null,
           toasts: [],
-        });
-
-        await apiRequest(`/api/games/${gameId}/transfer-host?new_host_id=${newHostId}`, {
-          method: 'POST',
         });
       },
 

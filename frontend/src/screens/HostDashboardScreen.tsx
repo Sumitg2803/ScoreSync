@@ -123,6 +123,9 @@ export const HostDashboardScreen: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       alert(err.message || 'Failed to transfer host');
+      if (gameId) {
+        fetchGame(gameId);
+      }
     } finally {
       setIsTransferring(false);
     }
