@@ -68,14 +68,16 @@ export const LeaderboardScreen: React.FC = () => {
               <QrCode className="w-3.5 h-3.5 text-indigo-600" />
             </button>
 
-            <div className="flex items-center gap-2">
-              <div
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
-                title="Live Viewers"
-              >
-                <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
-                <span>{spectatorCount || 0}</span>
-              </div>
+            <div className="flex items-center gap-1.5">
+              {spectatorCount > 0 && (
+                <div
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+                  title="Live Viewers"
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+                  <span>{spectatorCount}</span>
+                </div>
+              )}
 
               <button
                 onClick={() => setIsExitModalOpen(true)}
@@ -168,24 +170,26 @@ export const LeaderboardScreen: React.FC = () => {
               <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
             </button>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               {/* Corner Game ID & QR button */}
               <button
                 onClick={() => setIsQrModalOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
               >
                 <span>{gameId}</span>
                 <QrCode className="w-3.5 h-3.5 text-indigo-600" />
               </button>
 
-              {/* Live Eye Counter (Strictly icon and number, no text 'viewer') */}
-              <div
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
-                title="Live Viewers"
-              >
-                <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
-                <span>{spectatorCount || 0}</span>
-              </div>
+              {/* Live Eye Counter (Only shown when viewers are watching) */}
+              {spectatorCount > 0 && (
+                <div
+                  className="flex items-center gap-1 px-2 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-indigo-600 text-xs font-bold"
+                  title="Live Viewers"
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+                  <span>{spectatorCount}</span>
+                </div>
+              )}
 
               {/* Exit Game Button */}
               <button

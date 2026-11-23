@@ -124,31 +124,37 @@ export const HostDashboardScreen: React.FC = () => {
       <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8 relative">
         {/* Top Live Bar & Corner Game ID */}
         <div>
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-2.5">
-              <BarChart2 className="w-5 h-5 text-indigo-400" />
-              <span className="text-sm font-bold text-white tracking-wide truncate max-w-[140px]">{gameTitle}</span>
+          <div className="flex items-center justify-between mb-5 gap-2">
+            {/* Title with live pulsating indicator */}
+            <div className="flex items-center gap-2 min-w-0 flex-1">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <span className="text-sm font-bold text-white tracking-wide truncate">
+                {gameTitle}
+              </span>
             </div>
 
-            <div className="flex items-center gap-2">
+            {/* Right Action Chips */}
+            <div className="flex items-center gap-1.5 shrink-0">
               {/* Corner Game ID & QR button */}
               <button
                 onClick={() => setIsQrModalOpen(true)}
-                className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800/90 border border-slate-700/80 text-slate-300 text-xs font-bold hover:bg-slate-700 transition cursor-pointer"
                 title="Show QR Code"
               >
                 <span>{gameId}</span>
                 <QrCode className="w-3.5 h-3.5 text-indigo-400" />
               </button>
 
-              {/* Live Eye Counter */}
-              <div
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold"
-                title="Live Viewers"
-              >
-                <Eye className="w-3.5 h-3.5 text-indigo-400 stroke-[2.5]" />
-                <span>{spectatorCount || 0}</span>
-              </div>
+              {/* Live Eye Counter (Only shown when viewers are watching) */}
+              {spectatorCount > 0 && (
+                <div
+                  className="flex items-center gap-1 px-2 py-1 rounded-xl bg-slate-800/90 border border-slate-700/80 text-indigo-300 text-xs font-bold"
+                  title="Live Viewers"
+                >
+                  <Eye className="w-3.5 h-3.5 text-indigo-400 stroke-[2.5]" />
+                  <span>{spectatorCount}</span>
+                </div>
+              )}
 
               {/* Host Exit Button */}
               <button
@@ -159,11 +165,6 @@ export const HostDashboardScreen: React.FC = () => {
                 <LogOut className="w-3 h-3 text-rose-400" />
                 <span>Exit</span>
               </button>
-
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-xs font-bold text-emerald-300">Live</span>
-              </div>
             </div>
           </div>
 

@@ -92,16 +92,18 @@ export const ResultsScreen: React.FC = () => {
   return (
     <MobileContainer>
       <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8 text-center relative">
-        {/* Top Floating Eye Counter */}
-        <div className="flex justify-end mb-2">
-          <div
-            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
-            title="Live Viewers"
-          >
-            <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
-            <span>{spectatorCount || 0}</span>
+        {/* Top Floating Eye Counter (Only when viewers are watching) */}
+        {spectatorCount > 0 && (
+          <div className="flex justify-end mb-2">
+            <div
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+              title="Live Viewers"
+            >
+              <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+              <span>{spectatorCount}</span>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Celebration Header */}
         <div>
