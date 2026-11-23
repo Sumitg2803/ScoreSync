@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { TrophyIllustration, GameControllerAccent } from '../components/Illustrations';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowRight, QrCode, BookOpen } from 'lucide-react';
+import { ArrowRight, QrCode, BookOpen, Eye, Gamepad2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { UserGuideModal } from '../components/UserGuideModal';
 
@@ -99,13 +99,22 @@ export const WelcomeScreen: React.FC = () => {
             <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
           </button>
 
-          {/* Join Game Button (Secondary white card pill) */}
+          {/* Join Game Button (Secondary white card pill - for Players) */}
           <button
-            onClick={() => navigate('/join')}
-            className="w-full py-4 px-6 rounded-2xl bg-white text-[#1E1B4B] font-bold text-base shadow-md shadow-indigo-100/70 border border-slate-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-slate-50"
+            onClick={() => navigate('/join?mode=player')}
+            className="w-full py-3.5 px-6 rounded-2xl bg-white text-[#1E1B4B] font-bold text-base shadow-md shadow-indigo-100/70 border border-slate-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-slate-50"
           >
-            <QrCode className="w-5 h-5 text-indigo-600 stroke-[2.2]" />
+            <Gamepad2 className="w-5 h-5 text-indigo-600 stroke-[2.2]" />
             <span>Join Game</span>
+          </button>
+
+          {/* Join as Audience Button (Secondary pill - for Spectators) */}
+          <button
+            onClick={() => navigate('/join?mode=audience')}
+            className="w-full py-3.5 px-6 rounded-2xl bg-white text-indigo-950 font-bold text-base shadow-md shadow-indigo-100/70 border border-indigo-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-indigo-50/50"
+          >
+            <Eye className="w-5 h-5 text-purple-600 stroke-[2.2]" />
+            <span>Join as Audience</span>
           </button>
 
           {/* User Guide Pill Button (Only on Home Screen) */}

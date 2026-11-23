@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { useGameStore } from '../store/useGameStore';
 import { ArrowLeft, ArrowRight, User, QrCode, Eye, Gamepad2, Sparkles, X } from 'lucide-react';
@@ -7,9 +7,19 @@ import { GameControllerAccent } from '../components/Illustrations';
 import { QrScannerModal } from '../components/QrScannerModal';
 import { apiRequest } from '../services/api';
 
-export const JoinGameScreen: React.FC = () => {
+interface JoinGameScreenProps {
+  defaultMode?: 'player' | 'audience';
+}
+
+export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) => {
   const { id } = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+
+  // Determine initial mode from query param or prop
+  const urlMode = searchParams.get('mode') as 'player' | 'audience' | null;
+  const [mode, setMode] = useState<'player' | 'audience' | null>(urlMode || defaultMode || null);
+
   const currentGame = useGameStore((state) => state.currentGame);
   const isHost = useGameStore((state) => state.isHost);
   const isSpectator = useGameStore((state) => state.isSpectator);
@@ -51,47 +61,32 @@ export const JoinGameScreen: React.FC = () => {
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isWaitingForHost, setIsWaitingForHost] = useState(false);
 
-  // Ongoing Game Selection Modal State
+  // Ongoing Game Selection Modal State (Only used when scanned from camera/neutral QR)
   const [isOngoingModalOpen, setIsOngoingModalOpen] = useState(false);
   const [detectedGameCode, setDetectedGameCode] = useState('');
 
-  // Auto-detect if game is ongoing from URL id
+  // If user arrived via direct link (e.g. phone camera QR /join/:id) without explicit mode
   useEffect(() => {
-    const checkOngoing = async (code: string) => {
-      if (!code || code.length < 6) return;
+    const checkDirectQrScan = async (code: string) => {
+      if (!code || code.length < 6 || mode !== null) return;
       try {
         const game = await apiRequest(`/api/games/${code.toUpperCase()}`);
         if (game.status === 'in_progress') {
           setDetectedGameCode(code.toUpperCase());
           setIsOngoingModalOpen(true);
+        } else {
+          // If in waiting room, audience cannot join, so default to player
+          setMode('player');
         }
       } catch {
         // ignore
       }
     };
 
-    if (id && id.length === 6) {
-      checkOngoing(id);
+    if (id && id.length === 6 && !mode) {
+      checkDirectQrScan(id);
     }
-  }, [id]);
-
-  // Auto-detect when 6-characters are entered manually
-  useEffect(() => {
-    if (gameId.length === 6 && !id) {
-      const timer = setTimeout(async () => {
-        try {
-          const game = await apiRequest(`/api/games/${gameId.toUpperCase()}`);
-          if (game.status === 'in_progress' && !isOngoingModalOpen) {
-            setDetectedGameCode(gameId.toUpperCase());
-            setIsOngoingModalOpen(true);
-          }
-        } catch {
-          // ignore
-        }
-      }, 400);
-      return () => clearTimeout(timer);
-    }
-  }, [gameId, id, isOngoingModalOpen]);
+  }, [id, mode]);
 
   const handleScanSuccess = async (decodedText: string) => {
     setIsScannerOpen(false);
@@ -104,18 +99,42 @@ export const JoinGameScreen: React.FC = () => {
     const cleanCode = code.toUpperCase();
     setGameId(cleanCode);
 
+    // If user clicked "Join as Audience", direct join as audience on scan!
+    if (mode === 'audience') {
+      try {
+        setIsLoading(true);
+        setError('');
+        await joinAsSpectator(cleanCode);
+        navigate(`/leaderboard/${cleanCode}`);
+      } catch (err: any) {
+        setError(err.message || 'Failed to join as audience');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // If user clicked "Join Game", keep player mode and let them enter name
+    if (mode === 'player') {
+      return;
+    }
+
+    // Neutral scan: check if match is ongoing and prompt user
     try {
       const game = await apiRequest(`/api/games/${cleanCode}`);
       if (game.status === 'in_progress') {
         setDetectedGameCode(cleanCode);
         setIsOngoingModalOpen(true);
+      } else {
+        setMode('player');
       }
     } catch {
       // Let manual submit handle errors
+      setMode('player');
     }
   };
 
-  const handleJoin = async (e?: React.FormEvent) => {
+  const handleJoinPlayer = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!playerName.trim()) {
       setError('Please enter your name');
@@ -138,8 +157,13 @@ export const JoinGameScreen: React.FC = () => {
     }
   };
 
-  const handleJoinAudience = async () => {
-    const targetCode = detectedGameCode || gameId.trim().toUpperCase() || 'A7K9D2';
+  const handleJoinAudienceDirect = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const targetCode = (detectedGameCode || gameId).trim().toUpperCase() || 'A7K9D2';
+    if (!targetCode) {
+      setError('Please enter a 6-character game code');
+      return;
+    }
     try {
       setIsLoading(true);
       setError('');
@@ -151,6 +175,14 @@ export const JoinGameScreen: React.FC = () => {
       setIsOngoingModalOpen(false);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleChoosePlayerFromModal = () => {
+    setIsOngoingModalOpen(false);
+    setMode('player');
+    if (detectedGameCode) {
+      setGameId(detectedGameCode);
     }
   };
 
@@ -174,6 +206,9 @@ export const JoinGameScreen: React.FC = () => {
     return () => clearInterval(interval);
   }, [isWaitingForHost, gameId, playerName, joinGame, navigate]);
 
+  // Default to player if mode is neutral
+  const isAudienceMode = mode === 'audience';
+
   return (
     <MobileContainer>
       <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8 relative">
@@ -187,8 +222,14 @@ export const JoinGameScreen: React.FC = () => {
           </button>
 
           <div className="mt-4 mb-8">
-            <h1 className="text-2xl font-bold text-[#1E1B4B]">Join Game</h1>
-            <p className="text-sm text-slate-500 font-medium mt-1">Enter your details to join...</p>
+            <h1 className="text-2xl font-bold text-[#1E1B4B]">
+              {isAudienceMode ? 'Join as Audience' : 'Join Game'}
+            </h1>
+            <p className="text-sm text-slate-500 font-medium mt-1">
+              {isAudienceMode
+                ? 'Enter the game code to spectate live scores...'
+                : 'Enter your name to join as player...'}
+            </p>
           </div>
 
           {/* Waiting for Host Admission Banner */}
@@ -200,9 +241,9 @@ export const JoinGameScreen: React.FC = () => {
           )}
 
           {/* Form */}
-          <form onSubmit={handleJoin} className="space-y-4">
-            {/* If no ID in URL, ask for Game ID */}
-            {!id && (
+          {isAudienceMode ? (
+            /* AUDIENCE JOIN FORM (Zero name input required) */
+            <form onSubmit={handleJoinAudienceDirect} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
                   Game Code
@@ -211,48 +252,87 @@ export const JoinGameScreen: React.FC = () => {
                   type="text"
                   maxLength={6}
                   value={gameId}
-                  onChange={(e) => setGameId(e.target.value.toUpperCase())}
-                  placeholder="e.g. A7K9D2"
-                  className="w-full bg-white px-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-bold tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs uppercase"
-                />
-              </div>
-            )}
-
-            {/* Name Input */}
-            <div>
-              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
-                Your Name
-              </label>
-              <div className="relative flex items-center">
-                <div className="absolute left-4 text-slate-400">
-                  <User className="w-5 h-5 stroke-[2.2]" />
-                </div>
-                <input
-                  type="text"
-                  value={playerName}
                   onChange={(e) => {
-                    setPlayerName(e.target.value);
+                    setGameId(e.target.value.toUpperCase());
                     if (error) setError('');
                   }}
-                  placeholder="Your Name"
-                  className="w-full bg-white pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-semibold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs"
+                  placeholder="e.g. A7K9D2"
+                  className="w-full bg-white px-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-bold tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500/50 shadow-xs uppercase"
                 />
               </div>
-              {error && <p className="text-xs text-rose-500 font-semibold mt-1.5 ml-1">{error}</p>}
-            </div>
 
-            {/* Submit CTA */}
-            <div className="pt-2">
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
-              >
-                <span>{isLoading ? 'Joining...' : 'Join as Player'}</span>
-                <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
-              </button>
-            </div>
-          </form>
+              {error && <p className="text-xs text-rose-500 font-semibold mt-1.5 ml-1">{error}</p>}
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  <Eye className="w-5 h-5 stroke-[2.5]" />
+                  <span>{isLoading ? 'Joining Audience...' : 'Watch Game'}</span>
+                </button>
+              </div>
+            </form>
+          ) : (
+            /* PLAYER JOIN FORM */
+            <form onSubmit={handleJoinPlayer} className="space-y-4">
+              {/* If no ID in URL, ask for Game ID */}
+              {!id && (
+                <div>
+                  <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                    Game Code
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={gameId}
+                    onChange={(e) => {
+                      setGameId(e.target.value.toUpperCase());
+                      if (error) setError('');
+                    }}
+                    placeholder="e.g. A7K9D2"
+                    className="w-full bg-white px-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-bold tracking-widest placeholder:tracking-normal placeholder:font-normal placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs uppercase"
+                  />
+                </div>
+              )}
+
+              {/* Name Input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                  Your Name
+                </label>
+                <div className="relative flex items-center">
+                  <div className="absolute left-4 text-slate-400">
+                    <User className="w-5 h-5 stroke-[2.2]" />
+                  </div>
+                  <input
+                    type="text"
+                    value={playerName}
+                    onChange={(e) => {
+                      setPlayerName(e.target.value);
+                      if (error) setError('');
+                    }}
+                    placeholder="Your Name"
+                    className="w-full bg-white pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-semibold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs"
+                  />
+                </div>
+                {error && <p className="text-xs text-rose-500 font-semibold mt-1.5 ml-1">{error}</p>}
+              </div>
+
+              {/* Submit CTA */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                >
+                  <span>{isLoading ? 'Joining...' : 'Join as Player'}</span>
+                  <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
+                </button>
+              </div>
+            </form>
+          )}
 
           {/* Or Divider & QR Scanner */}
           <div className="my-6 flex items-center justify-center relative">
@@ -277,12 +357,15 @@ export const JoinGameScreen: React.FC = () => {
           onScanSuccess={handleScanSuccess}
         />
 
-        {/* Ongoing Game Mode Selector Modal (Player vs Audience) */}
+        {/* Ongoing Game Mode Selector Modal (Only shown for neutral QR scans from camera/in-app) */}
         {isOngoingModalOpen && (
           <div className="fixed inset-0 bg-slate-950/80 z-50 flex items-center justify-center p-4 backdrop-blur-xs">
             <div className="bg-white w-full max-w-sm rounded-[32px] p-6 relative flex flex-col shadow-2xl border border-slate-100">
               <button
-                onClick={() => setIsOngoingModalOpen(false)}
+                onClick={() => {
+                  setIsOngoingModalOpen(false);
+                  setMode('player');
+                }}
                 className="absolute top-4 right-4 p-2 rounded-full text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -304,7 +387,7 @@ export const JoinGameScreen: React.FC = () => {
               <div className="space-y-3 w-full">
                 {/* Option 1: Join as Player */}
                 <button
-                  onClick={() => setIsOngoingModalOpen(false)}
+                  onClick={handleChoosePlayerFromModal}
                   className="w-full p-4 rounded-2xl bg-slate-50 border border-slate-200/80 hover:border-indigo-300 hover:bg-indigo-50/40 text-left transition active:scale-[0.98] cursor-pointer group flex items-start gap-3.5"
                 >
                   <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center shrink-0 group-hover:bg-indigo-600 group-hover:text-white transition">
@@ -323,7 +406,7 @@ export const JoinGameScreen: React.FC = () => {
 
                 {/* Option 2: Join as Audience (Spectator) */}
                 <button
-                  onClick={handleJoinAudience}
+                  onClick={handleJoinAudienceDirect}
                   disabled={isLoading}
                   className="w-full p-4 rounded-2xl bg-gradient-to-r from-purple-50 via-indigo-50 to-pink-50 border-2 border-indigo-400/80 text-left transition active:scale-[0.98] cursor-pointer group flex items-start gap-3.5 shadow-xs hover:shadow-md"
                 >

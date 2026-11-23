@@ -17,6 +17,8 @@ export function App() {
         <Route path="/game-created/:id" element={<GameCreatedScreen />} />
         <Route path="/join" element={<JoinGameScreen />} />
         <Route path="/join/:id" element={<JoinGameScreen />} />
+        <Route path="/join-audience" element={<JoinGameScreen defaultMode="audience" />} />
+        <Route path="/join-audience/:id" element={<JoinGameScreen defaultMode="audience" />} />
         <Route path="/lobby/:id" element={<WaitingRoomScreen />} />
         <Route path="/host-dashboard/:id" element={<HostDashboardScreen />} />
         <Route path="/leaderboard/:id" element={<LeaderboardScreen />} />
