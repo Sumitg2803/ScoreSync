@@ -14,7 +14,8 @@ from fastapi.responses import FileResponse
 
 from .models import (
     GameModel, PlayerModel, RoundModel, AuditEditModel,
-    CreateGameRequest, JoinGameRequest, AddRoundRequest, EditRoundRequest
+    CreateGameRequest, JoinGameRequest, AddRoundRequest, EditRoundRequest,
+    JoinSpectatorRequest
 )
 from .database import get_database
 from .scoring import calculate_leaderboard
@@ -182,6 +183,7 @@ async def get_game(game_id: str):
     # Mask private host_token from public player read-calls
     del res["host_token"]
     res["leaderboard"] = calculate_leaderboard(game)
+    res["spectator_count"] = len(game.spectators)
     return res
 
 @app.post("/api/games/{game_id}/join")
@@ -250,6 +252,80 @@ async def join_game(game_id: str, req: JoinGameRequest):
         "device_token": device_token,
         "game": game_res
     }
+
+@app.post("/api/games/{game_id}/join-spectator")
+async def join_spectator(game_id: str, req: JoinSpectatorRequest):
+    """Audience member joins to spectate an ongoing game (bypasses admission lock, no name required)"""
+    db = get_database()
+    game_dict = await db.games.find_one({"id": game_id.upper()})
+    if not game_dict:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    game = GameModel(**game_dict)
+    if game.status == "waiting":
+        raise HTTPException(
+            status_code=400,
+            detail="Audience mode is only available for ongoing games. Game is currently in waiting room."
+        )
+
+    device_token = req.device_token or f"spec_{secrets.token_hex(12)}"
+    if device_token not in game.spectators:
+        game.spectators.append(device_token)
+        game.last_activity_at = datetime.utcnow().isoformat()
+        await db.games.update_one(
+            {"id": game.id},
+            {"$set": {"spectators": game.spectators, "last_activity_at": game.last_activity_at}}
+        )
+
+    game_res = game.dict()
+    del game_res["host_token"]
+    game_res["leaderboard"] = calculate_leaderboard(game)
+    game_res["spectator_count"] = len(game.spectators)
+
+    # Broadcast updated spectator count silently (no toast on join/leave)
+    await manager.broadcast_game_update(
+        game.id,
+        "SPECTATOR_COUNT_CHANGED",
+        game_res,
+        meta={"spectator_count": len(game.spectators)}
+    )
+
+    return {
+        "device_token": device_token,
+        "game": game_res,
+        "spectator_count": len(game.spectators)
+    }
+
+@app.post("/api/games/{game_id}/leave-spectator")
+async def leave_spectator(game_id: str, device_token: Optional[str] = None):
+    """Audience member exits spectator mode"""
+    db = get_database()
+    game_dict = await db.games.find_one({"id": game_id.upper()})
+    if not game_dict:
+        return {"status": "ok"}
+
+    game = GameModel(**game_dict)
+    if device_token and device_token in game.spectators:
+        game.spectators.remove(device_token)
+        game.last_activity_at = datetime.utcnow().isoformat()
+        await db.games.update_one(
+            {"id": game.id},
+            {"$set": {"spectators": game.spectators, "last_activity_at": game.last_activity_at}}
+        )
+
+        game_res = game.dict()
+        del game_res["host_token"]
+        game_res["leaderboard"] = calculate_leaderboard(game)
+        game_res["spectator_count"] = len(game.spectators)
+
+        # Broadcast updated spectator count silently
+        await manager.broadcast_game_update(
+            game.id,
+            "SPECTATOR_COUNT_CHANGED",
+            game_res,
+            meta={"spectator_count": len(game.spectators)}
+        )
+    return {"status": "ok", "spectator_count": len(game.spectators)}
 
 @app.post("/api/games/{game_id}/lock-admission")
 async def lock_admission(game_id: str, lock: bool, x_host_token: Optional[str] = Header(None)):

@@ -6,7 +6,8 @@ import { TrophyIllustration } from '../components/Illustrations';
 import { GameCodeModal } from '../components/GameCodeModal';
 import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { ArrowLeft, Crown, BarChart3, QrCode, LogOut } from 'lucide-react';
+import { ArrowLeft, Crown, BarChart3, QrCode, LogOut, Eye } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 export const LeaderboardScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -14,8 +15,11 @@ export const LeaderboardScreen: React.FC = () => {
 
   const currentGame = useGameStore((state) => state.currentGame);
   const currentPlayerId = useGameStore((state) => state.currentPlayerId);
+  const isSpectator = useGameStore((state) => state.isSpectator);
+  const spectatorCount = useGameStore((state) => state.spectatorCount);
   const getRankings = useGameStore((state) => state.getRankings);
   const leaveGame = useGameStore((state) => state.leaveGame);
+  const leaveSpectator = useGameStore((state) => state.leaveSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
   const toasts = useGameStore((state) => state.toasts);
 
@@ -39,10 +43,99 @@ export const LeaderboardScreen: React.FC = () => {
   }, [currentGame?.status, gameId, navigate]);
 
   const handleConfirmExit = async () => {
-    await leaveGame();
+    if (isSpectator) {
+      await leaveSpectator();
+    } else {
+      await leaveGame();
+    }
     setIsExitModalOpen(false);
     navigate('/');
   };
+
+  // Audience Holding Screen: When host clicked "Play Again", spectators see this waiting screen
+  if (isSpectator && currentGame?.status === 'waiting') {
+    return (
+      <MobileContainer>
+        <ToastContainer toasts={toasts} />
+        <div className="flex-1 flex flex-col justify-between p-6 pt-10 pb-8 relative">
+          {/* Top Status & Controls */}
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setIsQrModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold hover:bg-slate-50 transition cursor-pointer"
+            >
+              <span>{gameId}</span>
+              <QrCode className="w-3.5 h-3.5 text-indigo-600" />
+            </button>
+
+            <div className="flex items-center gap-2">
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+                title="Live Viewers"
+              >
+                <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+                <span>{spectatorCount || 0}</span>
+              </div>
+
+              <button
+                onClick={() => setIsExitModalOpen(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold hover:bg-rose-100 transition cursor-pointer"
+                title="Exit Spectator Mode"
+              >
+                <LogOut className="w-3 h-3" />
+                <span>Exit</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Center Hero with Trophy, ScoreSync, and holding message */}
+          <div className="flex-1 flex flex-col items-center justify-center text-center my-auto px-4">
+            <motion.div
+              initial={{ scale: 0.85, opacity: 0 }}
+              animate={{ scale: [1, 1.05, 1], opacity: 1 }}
+              transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+              className="mb-6"
+            >
+              <TrophyIllustration size={110} />
+            </motion.div>
+
+            <h1 className="text-4xl font-extrabold tracking-tight text-[#1E1B4B] mb-2">
+              ScoreSync
+            </h1>
+
+            <p className="text-sm font-semibold text-slate-600 max-w-xs mx-auto leading-relaxed mt-2">
+              Game is not over yet, stay connected while next game start
+            </p>
+
+            <div className="mt-6 px-4 py-2 rounded-2xl bg-indigo-50/90 border border-indigo-100 text-indigo-700 text-xs font-bold flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
+              <span>Host is setting up the next match...</span>
+            </div>
+          </div>
+
+          {/* Bottom Game ID Chip */}
+          <div className="text-center text-[11px] font-bold text-slate-400">
+            Spectating Game #{gameId}
+          </div>
+
+          <ExitConfirmModal
+            isOpen={isExitModalOpen}
+            onClose={() => setIsExitModalOpen(false)}
+            onConfirm={handleConfirmExit}
+            title="Exit Spectator Mode?"
+            description="You will stop watching this game. You can re-join anytime using the game code."
+            confirmText="Yes, Exit"
+          />
+
+          <GameCodeModal
+            isOpen={isQrModalOpen}
+            onClose={() => setIsQrModalOpen(false)}
+            gameId={gameId}
+          />
+        </div>
+      </MobileContainer>
+    );
+  }
 
   const rankings = getRankings();
   const rounds = currentGame?.rounds || [];
@@ -59,11 +152,17 @@ export const LeaderboardScreen: React.FC = () => {
     <MobileContainer>
       <ToastContainer toasts={toasts} />
       <div className="flex-1 flex flex-col justify-between p-6 pt-6 pb-8">
-        {/* Top Header with Back, Corner Game ID + QR, and Exit button */}
+        {/* Top Header with Back, Corner Game ID + QR, Eye counter, and Exit button */}
         <div>
           <div className="flex items-center justify-between mb-2">
             <button
-              onClick={() => navigate('/')}
+              onClick={() => {
+                if (isSpectator) {
+                  setIsExitModalOpen(true);
+                } else {
+                  navigate('/');
+                }
+              }}
               className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-white/60 transition cursor-pointer"
             >
               <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
@@ -79,11 +178,20 @@ export const LeaderboardScreen: React.FC = () => {
                 <QrCode className="w-3.5 h-3.5 text-indigo-600" />
               </button>
 
+              {/* Live Eye Counter (Strictly icon and number, no text 'viewer') */}
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+                title="Live Viewers"
+              >
+                <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+                <span>{spectatorCount || 0}</span>
+              </div>
+
               {/* Exit Game Button */}
               <button
                 onClick={() => setIsExitModalOpen(true)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-rose-50 border border-rose-200 text-rose-600 text-xs font-bold hover:bg-rose-100 transition cursor-pointer"
-                title="Exit Game"
+                title={isSpectator ? 'Exit Spectator Mode' : 'Exit Game'}
               >
                 <LogOut className="w-3 h-3" />
                 <span>Exit</span>
@@ -149,7 +257,7 @@ export const LeaderboardScreen: React.FC = () => {
               const joinedAtRound = (item.player as any).joined_at_round || 1;
               const viewingRoundNumber = activeRoundIndex + 1;
               const didNotExist = viewingRoundNumber < joinedAtRound;
-              const isCurrentUser = item.player.id === currentPlayerId;
+              const isCurrentUser = !isSpectator && item.player.id === currentPlayerId;
 
               // Calculate specific round score for this player
               let roundScore = 0;
@@ -229,6 +337,13 @@ export const LeaderboardScreen: React.FC = () => {
           isOpen={isExitModalOpen}
           onClose={() => setIsExitModalOpen(false)}
           onConfirm={handleConfirmExit}
+          title={isSpectator ? 'Exit Spectator Mode?' : 'Exit Game?'}
+          description={
+            isSpectator
+              ? 'You will stop watching this game. You can re-join anytime using the game code.'
+              : 'Are you sure you want to exit? Your recorded scores will be completely removed and you will not be included in the final rankings.'
+          }
+          confirmText={isSpectator ? 'Yes, Exit' : 'Yes, Exit Game'}
         />
       </div>
     </MobileContainer>

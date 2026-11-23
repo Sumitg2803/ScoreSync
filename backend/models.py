@@ -40,6 +40,7 @@ class GameModel(BaseModel):
     players: List[PlayerModel] = []
     rounds: List[RoundModel] = []
     audit_history: List[AuditEditModel] = []
+    spectators: List[str] = []  # List of spectator device tokens
 
 # Request & Response Schemas
 class CreateGameRequest(BaseModel):
@@ -49,6 +50,9 @@ class CreateGameRequest(BaseModel):
 
 class JoinGameRequest(BaseModel):
     player_name: str
+    device_token: Optional[str] = None
+
+class JoinSpectatorRequest(BaseModel):
     device_token: Optional[str] = None
 
 class AddRoundRequest(BaseModel):

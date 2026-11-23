@@ -9,13 +9,14 @@ import { GameCodeModal } from '../components/GameCodeModal';
 import { TransferHostModal } from '../components/TransferHostModal';
 import { CompleteGameModal } from '../components/CompleteGameModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut } from 'lucide-react';
+import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut, Eye } from 'lucide-react';
 
 export const HostDashboardScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
   const currentGame = useGameStore((state) => state.currentGame);
+  const spectatorCount = useGameStore((state) => state.spectatorCount);
   const getRankings = useGameStore((state) => state.getRankings);
   const addRound = useGameStore((state) => state.addRound);
   const editRound = useGameStore((state) => state.editRound);
@@ -139,6 +140,15 @@ export const HostDashboardScreen: React.FC = () => {
                 <span>{gameId}</span>
                 <QrCode className="w-3.5 h-3.5 text-indigo-400" />
               </button>
+
+              {/* Live Eye Counter */}
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-slate-800 border border-slate-700 text-slate-300 text-xs font-bold"
+                title="Live Viewers"
+              >
+                <Eye className="w-3.5 h-3.5 text-indigo-400 stroke-[2.5]" />
+                <span>{spectatorCount || 0}</span>
+              </div>
 
               {/* Host Exit Button */}
               <button

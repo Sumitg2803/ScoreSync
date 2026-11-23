@@ -20,6 +20,7 @@ import {
   FileX,
   Flame,
   CheckCircle2,
+  Eye,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -30,7 +31,7 @@ interface UserGuideModalProps {
 
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose }) => {
   // Default tab is "why" as requested
-  const [activeTab, setActiveTab] = useState<'why' | 'host' | 'player'>('why');
+  const [activeTab, setActiveTab] = useState<'why' | 'host' | 'player' | 'viewer'>('why');
 
   if (!isOpen) return null;
 
@@ -63,12 +64,12 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
             </button>
           </div>
 
-          {/* 3-Way Segmented Tab Selector */}
-          <div className="p-2.5 bg-slate-50 border-b border-slate-100">
+          {/* 4-Way Segmented Tab Selector */}
+          <div className="p-2 bg-slate-50 border-b border-slate-100">
             <div className="flex bg-slate-200/80 p-1 rounded-2xl max-w-sm mx-auto">
               <button
                 onClick={() => setActiveTab('why')}
-                className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'why'
                     ? 'bg-amber-500 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
@@ -79,25 +80,36 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
               </button>
               <button
                 onClick={() => setActiveTab('host')}
-                className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'host'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <Crown className="w-3.5 h-3.5" />
-                <span>Host Guide</span>
+                <span>Host</span>
               </button>
               <button
                 onClick={() => setActiveTab('player')}
-                className={`flex-1 py-1.5 px-2 text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
+                className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'player'
                     ? 'bg-indigo-600 text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 <Gamepad2 className="w-3.5 h-3.5" />
-                <span>Player Guide</span>
+                <span>Player</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('viewer')}
+                className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
+                  activeTab === 'viewer'
+                    ? 'bg-purple-600 text-white shadow-xs'
+                    : 'text-slate-600 hover:text-slate-900'
+                }`}
+              >
+                <Eye className="w-3.5 h-3.5" />
+                <span>Viewer</span>
               </button>
             </div>
           </div>
@@ -346,6 +358,79 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                   </div>
                   <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
                     If you must drop out mid-game, tapping <strong>"Exit"</strong> gives a confirmation and scrubs your entry. When the game ends naturally, your final rank remains celebrated on the podium even if you tap <strong>"Home"</strong>.
+                  </p>
+                </div>
+              </>
+            )}
+
+            {/* TAB 4: VIEWER GUIDE (SPECTATOR MODE) */}
+            {activeTab === 'viewer' && (
+              <>
+                {/* Hero Audience Banner */}
+                <div className="bg-gradient-to-br from-purple-600 via-indigo-600 to-violet-700 p-4 rounded-3xl text-white shadow-md shadow-indigo-500/20">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Eye className="w-5 h-5 text-indigo-200 stroke-[2.5]" />
+                    <h3 className="font-black text-sm tracking-wide uppercase text-indigo-100">
+                      Sit Back, Cheer & Spectate! 🍿👀
+                    </h3>
+                  </div>
+                  <p className="text-xs text-white/95 leading-relaxed font-medium mt-1">
+                    Not competing this round? Friends, family, and cheering squads can watch live scores, round notes, and final podium rankings in real-time from their own phones!
+                  </p>
+                </div>
+
+                {/* Feature 1: Joining an Ongoing Game */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <QrCode className="w-4 h-4 text-purple-600" />
+                    <span>1. Joining as Audience (Ongoing Games Only)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
+                    Audience entry is enabled for <strong>ongoing matches</strong>. Scan the host's QR code or enter the 6-character game code. When prompted, select <strong>"Join as Audience"</strong>. No player name is required and you instantly enter without waiting for host admission!
+                  </p>
+                </div>
+
+                {/* Feature 2: What You Can See */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <Layers className="w-4 h-4 text-purple-600" />
+                    <span>2. What Can You See?</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
+                    You have full view of player names, the active host, live overall scores, round-by-round breakdown, historical notes, toast score alerts, and the final celebratory podium.
+                  </p>
+                </div>
+
+                {/* Feature 3: Live Eye Counter */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <Eye className="w-4 h-4 text-indigo-600 stroke-[2.5]" />
+                    <span>3. Live Eye Counter (👁️)</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
+                    When you join, every screen in the room (Host, Players, and Viewers) silently displays the live eye icon and viewer count in the top bar so everyone knows how many spectators are watching!
+                  </p>
+                </div>
+
+                {/* Feature 4: Phone Lock & Exit */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <Smartphone className="w-4 h-4 text-amber-500" />
+                    <span>4. Persistent Session & Clean Exit</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
+                    Your phone stays locked to the spectator session even if you refresh or switch apps. To stop watching, simply tap the <strong>"Exit"</strong> button in the top corner and confirm.
+                  </p>
+                </div>
+
+                {/* Feature 5: Next Game Holding Screen */}
+                <div className="bg-white p-3.5 rounded-2xl border border-slate-100 shadow-xs space-y-1">
+                  <div className="flex items-center gap-2 text-slate-900 font-bold text-xs">
+                    <Trophy className="w-4 h-4 text-emerald-600" />
+                    <span>5. "Play Again" Holding Screen</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 leading-relaxed pl-6">
+                    When the final leaderboard ends and the host taps <em>"Play Again"</em>, players return to the waiting lobby, while viewers see a holding screen: <em>"Game is not over yet, stay connected while next game start"</em>. The moment the host starts the next match, your screen snaps right back to live scoring!
                   </p>
                 </div>
               </>

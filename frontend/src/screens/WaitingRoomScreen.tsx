@@ -5,7 +5,7 @@ import { useGameStore } from '../store/useGameStore';
 import { Avatar } from '../components/Avatar';
 import { CancelGameModal } from '../components/CancelGameModal';
 import { ToastContainer } from '../components/ToastContainer';
-import { ArrowLeft, Play, Copy, Check, Users } from 'lucide-react';
+import { ArrowLeft, Play, Copy, Check, Users, Eye } from 'lucide-react';
 
 export const WaitingRoomScreen: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -13,6 +13,7 @@ export const WaitingRoomScreen: React.FC = () => {
 
   const currentGame = useGameStore((state) => state.currentGame);
   const isHost = useGameStore((state) => state.isHost);
+  const spectatorCount = useGameStore((state) => state.spectatorCount);
   const startGame = useGameStore((state) => state.startGame);
   const leaveGame = useGameStore((state) => state.leaveGame);
   const resetCurrentGame = useGameStore((state) => state.resetCurrentGame);
@@ -69,13 +70,25 @@ export const WaitingRoomScreen: React.FC = () => {
       <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8">
         {/* Top Header */}
         <div>
-          <button
-            onClick={() => setIsCancelModalOpen(true)}
-            className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-white/60 transition cursor-pointer"
-            title={isHost ? 'Cancel Game' : 'Leave Room'}
-          >
-            <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
-          </button>
+          <div className="flex items-center justify-between">
+            <button
+              onClick={() => setIsCancelModalOpen(true)}
+              className="p-2 -ml-2 rounded-xl text-slate-700 hover:bg-white/60 transition cursor-pointer"
+              title={isHost ? 'Cancel Game' : 'Leave Room'}
+            >
+              <ArrowLeft className="w-6 h-6 stroke-[2.5]" />
+            </button>
+
+            {spectatorCount > 0 && (
+              <div
+                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+                title="Live Viewers"
+              >
+                <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+                <span>{spectatorCount}</span>
+              </div>
+            )}
+          </div>
 
           <div className="text-center mt-1 mb-6">
             <h1 className="text-2xl font-bold text-[#1E1B4B]">Waiting Room</h1>

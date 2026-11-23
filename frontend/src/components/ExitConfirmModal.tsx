@@ -5,12 +5,18 @@ interface ExitConfirmModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: () => void;
+  title?: string;
+  description?: string;
+  confirmText?: string;
 }
 
 export const ExitConfirmModal: React.FC<ExitConfirmModalProps> = ({
   isOpen,
   onClose,
   onConfirm,
+  title = 'Exit Game?',
+  description = 'Are you sure you want to exit? Your recorded scores will be completely removed and you will not be included in the final rankings.',
+  confirmText = 'Yes, Exit Game',
 }) => {
   if (!isOpen) return null;
 
@@ -21,9 +27,9 @@ export const ExitConfirmModal: React.FC<ExitConfirmModalProps> = ({
           <AlertTriangle className="w-6 h-6 stroke-[2.2]" />
         </div>
 
-        <h3 className="font-extrabold text-lg text-[#1E1B4B] mb-1">Exit Game?</h3>
+        <h3 className="font-extrabold text-lg text-[#1E1B4B] mb-1">{title}</h3>
         <p className="text-xs text-slate-500 leading-relaxed mb-6 font-medium">
-          Are you sure you want to exit? Your recorded scores will be completely removed and you will not be included in the final rankings.
+          {description}
         </p>
 
         <div className="space-y-2.5 w-full">
@@ -31,7 +37,7 @@ export const ExitConfirmModal: React.FC<ExitConfirmModalProps> = ({
             onClick={onConfirm}
             className="w-full py-3.5 rounded-2xl bg-rose-600 text-white font-bold text-xs shadow-lg shadow-rose-500/30 active:scale-[0.98] transition cursor-pointer"
           >
-            Yes, Exit Game
+            {confirmText}
           </button>
           <button
             onClick={onClose}

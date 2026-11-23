@@ -3,15 +3,18 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { useGameStore } from '../store/useGameStore';
 import { TrophyIllustration } from '../components/Illustrations';
+import { Eye } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
 export const ResultsScreen: React.FC = () => {
   const navigate = useNavigate();
   const currentGame = useGameStore((state) => state.currentGame);
   const isHost = useGameStore((state) => state.isHost);
+  const isSpectator = useGameStore((state) => state.isSpectator);
+  const spectatorCount = useGameStore((state) => state.spectatorCount);
   const getRankings = useGameStore((state) => state.getRankings);
   const playAgain = useGameStore((state) => state.playAgain);
-  const leaveGame = useGameStore((state) => state.leaveGame);
+  const leaveSpectator = useGameStore((state) => state.leaveSpectator);
   const resetCurrentGame = useGameStore((state) => state.resetCurrentGame);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
 
@@ -23,12 +26,18 @@ export const ResultsScreen: React.FC = () => {
     }
   }, [gameId, connectWebSocket]);
 
-  // When host resets game back to lobby via playAgain, navigate everyone back to waiting room
+  // When host resets game back to lobby via playAgain:
+  // - Players navigate back to waiting room
+  // - Viewers navigate to LeaderboardScreen (which renders the Audience Holding Screen)
   React.useEffect(() => {
     if (currentGame && currentGame.status === 'waiting' && gameId) {
-      navigate(`/lobby/${gameId}`);
+      if (isSpectator) {
+        navigate(`/leaderboard/${gameId}`);
+      } else {
+        navigate(`/lobby/${gameId}`);
+      }
     }
-  }, [currentGame?.status, gameId, navigate]);
+  }, [currentGame?.status, isSpectator, gameId, navigate]);
 
   const rankings = getRankings();
 
@@ -68,18 +77,32 @@ export const ResultsScreen: React.FC = () => {
     if (isHost) {
       await resetCurrentGame();
       navigate('/');
+    } else if (isSpectator) {
+      await leaveSpectator();
+      navigate('/');
     } else {
       // Player leaves the final results screen: cleanly disconnect without deleting completed scores
       const { disconnectWebSocket } = useGameStore.getState();
       disconnectWebSocket();
-      useGameStore.setState({ currentGame: null, currentPlayerId: null, isHost: false });
+      useGameStore.setState({ currentGame: null, currentPlayerId: null, isHost: false, isSpectator: false, spectatorCount: 0 });
       navigate('/');
     }
   };
 
   return (
     <MobileContainer>
-      <div className="flex-1 flex flex-col justify-between p-6 pt-10 pb-8 text-center">
+      <div className="flex-1 flex flex-col justify-between p-6 pt-8 pb-8 text-center relative">
+        {/* Top Floating Eye Counter */}
+        <div className="flex justify-end mb-2">
+          <div
+            className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
+            title="Live Viewers"
+          >
+            <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
+            <span>{spectatorCount || 0}</span>
+          </div>
+        </div>
+
         {/* Celebration Header */}
         <div>
           <div className="flex justify-center mb-4">

@@ -11,6 +11,7 @@ export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const currentGame = useGameStore((state) => state.currentGame);
   const isHost = useGameStore((state) => state.isHost);
+  const isSpectator = useGameStore((state) => state.isSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
 
   const [isGuideOpen, setIsGuideOpen] = React.useState(false);
@@ -19,7 +20,13 @@ export const WelcomeScreen: React.FC = () => {
   useEffect(() => {
     if (currentGame && currentGame.id) {
       connectWebSocket(currentGame.id);
-      if (currentGame.status === 'in_progress') {
+      if (isSpectator) {
+        if (currentGame.status === 'completed') {
+          navigate(`/results/${currentGame.id}`, { replace: true });
+        } else {
+          navigate(`/leaderboard/${currentGame.id}`, { replace: true });
+        }
+      } else if (currentGame.status === 'in_progress') {
         if (isHost) {
           navigate(`/host-dashboard/${currentGame.id}`, { replace: true });
         } else {
@@ -27,9 +34,11 @@ export const WelcomeScreen: React.FC = () => {
         }
       } else if (currentGame.status === 'waiting') {
         navigate(`/lobby/${currentGame.id}`, { replace: true });
+      } else if (currentGame.status === 'completed') {
+        navigate(`/results/${currentGame.id}`, { replace: true });
       }
     }
-  }, [currentGame, isHost, connectWebSocket, navigate]);
+  }, [currentGame, isHost, isSpectator, connectWebSocket, navigate]);
 
   return (
     <MobileContainer>

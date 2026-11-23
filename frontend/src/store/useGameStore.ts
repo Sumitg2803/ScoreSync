@@ -8,6 +8,8 @@ interface GameStore {
   currentPlayerId: string | null;
   hostToken: string | null;
   isHost: boolean;
+  isSpectator: boolean;
+  spectatorCount: number;
   isConnected: boolean;
   socket: WebSocket | null;
   toasts: { id: string; type: 'player_joined' | 'player_left' | 'info'; message: string }[];
@@ -19,7 +21,9 @@ interface GameStore {
   setCurrentPlayer: (playerId: string, isHost?: boolean) => void;
   createGame: (name: string, scoringRule: ScoringRule, hostName?: string) => Promise<GameState>;
   joinGame: (gameId: string, playerName: string) => Promise<Player>;
+  joinAsSpectator: (gameId: string) => Promise<GameState>;
   leaveGame: () => Promise<void>;
+  leaveSpectator: () => Promise<void>;
   setAdmissionLock: (lock: boolean) => Promise<void>;
   startGame: () => Promise<void>;
   addRound: (scores: Record<string, number>, note?: string) => Promise<void>;
@@ -40,6 +44,8 @@ export const useGameStore = create<GameStore>()(
       currentPlayerId: null,
       hostToken: null,
       isHost: false,
+      isSpectator: false,
+      spectatorCount: 0,
       isConnected: false,
       socket: null,
       toasts: [],
@@ -78,6 +84,8 @@ export const useGameStore = create<GameStore>()(
           currentPlayerId: data.host_id,
           hostToken: data.host_token,
           isHost: true,
+          isSpectator: false,
+          spectatorCount: 0,
         });
 
         get().connectWebSocket(data.id);
@@ -92,14 +100,37 @@ export const useGameStore = create<GameStore>()(
         });
 
         const player = data.game.players.find((p: Player) => p.id === data.player_id);
+        const sCount = data.game.spectator_count ?? (data.game.spectators?.length ?? 0);
         set({
           currentGame: data.game,
           currentPlayerId: data.player_id,
           isHost: false,
+          isSpectator: false,
+          spectatorCount: sCount,
         });
 
         get().connectWebSocket(gameId.toUpperCase());
         return player;
+      },
+
+      joinAsSpectator: async (gameId: string) => {
+        const deviceToken = getOrCreateDeviceToken();
+        const data = await apiRequest(`/api/games/${gameId.toUpperCase()}/join-spectator`, {
+          method: 'POST',
+          body: JSON.stringify({ device_token: deviceToken }),
+        });
+
+        const sCount = data.spectator_count ?? (data.game?.spectator_count ?? (data.game?.spectators?.length ?? 0));
+        set({
+          currentGame: data.game,
+          currentPlayerId: null,
+          isHost: false,
+          isSpectator: true,
+          spectatorCount: sCount,
+        });
+
+        get().connectWebSocket(gameId.toUpperCase());
+        return data.game;
       },
 
       leaveGame: async () => {
@@ -115,7 +146,30 @@ export const useGameStore = create<GameStore>()(
         }
         localStorage.removeItem('scoresync_device_token');
         get().disconnectWebSocket();
-        set({ currentGame: null, currentPlayerId: null, isHost: false });
+        set({ currentGame: null, currentPlayerId: null, isHost: false, isSpectator: false, spectatorCount: 0 });
+      },
+
+      leaveSpectator: async () => {
+        const { currentGame } = get();
+        const deviceToken = localStorage.getItem('scoresync_device_token');
+        if (currentGame && deviceToken) {
+          try {
+            await apiRequest(`/api/games/${currentGame.id}/leave-spectator?device_token=${encodeURIComponent(deviceToken)}`, {
+              method: 'POST',
+            });
+          } catch {
+            // ignore
+          }
+        }
+        localStorage.removeItem('scoresync_device_token');
+        get().disconnectWebSocket();
+        set({
+          currentGame: null,
+          currentPlayerId: null,
+          isHost: false,
+          isSpectator: false,
+          spectatorCount: 0,
+        });
       },
 
       setAdmissionLock: async (lock: boolean) => {
@@ -193,7 +247,7 @@ export const useGameStore = create<GameStore>()(
         }
         localStorage.removeItem('scoresync_host_token');
         get().disconnectWebSocket();
-        set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false });
+        set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false, isSpectator: false, spectatorCount: 0 });
       },
 
       connectWebSocket: (gameId: string) => {
@@ -214,10 +268,17 @@ export const useGameStore = create<GameStore>()(
             const data = JSON.parse(event.data);
             if (data.event === 'GAME_TERMINATED') {
               localStorage.removeItem('scoresync_host_token');
+              localStorage.removeItem('scoresync_device_token');
               get().disconnectWebSocket();
-              set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false });
+              set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false, isSpectator: false, spectatorCount: 0 });
               window.location.href = '/';
               return;
+            }
+
+            if (data.event === 'SPECTATOR_COUNT_CHANGED') {
+              if (typeof data.meta?.spectator_count === 'number') {
+                set({ spectatorCount: data.meta.spectator_count });
+              }
             }
 
             if (data.event === 'HOST_TRANSFERRED' && data.meta) {
@@ -237,7 +298,8 @@ export const useGameStore = create<GameStore>()(
             }
 
             if (data.game) {
-              set({ currentGame: data.game });
+              const count = data.game.spectator_count ?? (data.game.spectators?.length ?? get().spectatorCount);
+              set({ currentGame: data.game, spectatorCount: count });
             }
           } catch {
             // Non-JSON message
@@ -314,6 +376,7 @@ export const useGameStore = create<GameStore>()(
         currentPlayerId: state.currentPlayerId,
         hostToken: state.hostToken,
         isHost: state.isHost,
+        isSpectator: state.isSpectator,
       }),
     }
   )
