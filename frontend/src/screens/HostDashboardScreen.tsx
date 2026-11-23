@@ -218,7 +218,13 @@ export const HostDashboardScreen: React.FC = () => {
                     </span>
                   )}
                   <Avatar name={item.player.name} size="sm" />
-                  <span className="font-bold text-sm text-slate-100">{item.player.name}</span>
+                  <div>
+                    <span className="font-bold text-sm text-slate-100 block">
+                      {item.player.id === (currentGame?.hostId || (currentGame as any)?.host_id)
+                        ? `${item.player.name} Host (You)`
+                        : item.player.name}
+                    </span>
+                  </div>
                 </div>
 
                 <span className="font-extrabold text-base text-white tracking-tight">

@@ -169,7 +169,18 @@ export const LeaderboardScreen: React.FC = () => {
                     )}
                     <div>
                       <span className="font-bold text-sm text-[#1E1B4B] block">
-                        {item.player.name} {isCurrentUser && <span className="text-[10px] text-indigo-600 font-extrabold">(You)</span>}
+                        {(() => {
+                          const hostId = currentGame?.hostId || (currentGame as any)?.host_id;
+                          const isHostPlayer = item.player.id === hostId;
+                          if (isCurrentUser) {
+                            return isHostPlayer
+                              ? `${item.player.name} Host (You)`
+                              : `${item.player.name} (You)`;
+                          }
+                          return isHostPlayer
+                            ? `${item.player.name} (Host)`
+                            : item.player.name;
+                        })()}
                       </span>
                       {activeTab === 'rounds' && didNotExist && (
                         <span className="text-[10px] font-semibold text-amber-600 block">
