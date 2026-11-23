@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import type { ScoringRule } from '../types/game';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowLeft, ArrowRight, Gamepad2, Trophy, ArrowDown, HelpCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Gamepad2, Trophy, ArrowDown, HelpCircle, User } from 'lucide-react';
 import { GameControllerAccent } from '../components/Illustrations';
 
 export const CreateGameScreen: React.FC = () => {
@@ -11,14 +11,22 @@ export const CreateGameScreen: React.FC = () => {
   const createGame = useGameStore((state) => state.createGame);
 
   const [gameName, setGameName] = useState('Friday Game Night');
+  const [hostName, setHostName] = useState('');
   const [scoringRule, setScoringRule] = useState<ScoringRule>('highest_wins');
   const [isLoading, setIsLoading] = useState(false);
 
   const handleCreate = async () => {
-    if (!gameName.trim()) return;
+    if (!gameName.trim()) {
+      alert('Please enter a game name');
+      return;
+    }
+    if (!hostName.trim()) {
+      alert('Please enter your name');
+      return;
+    }
     try {
       setIsLoading(true);
-      const newGame = await createGame(gameName.trim(), scoringRule);
+      const newGame = await createGame(gameName.trim(), scoringRule, hostName.trim());
       navigate(`/game-created/${newGame.id}`);
     } catch (err: any) {
       alert(err.message || 'Failed to create game');
@@ -45,7 +53,26 @@ export const CreateGameScreen: React.FC = () => {
           </div>
 
           {/* Form Fields */}
-          <div className="space-y-6">
+          <div className="space-y-5">
+            {/* Host Name Input */}
+            <div>
+              <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
+                Your Name (Host)
+              </label>
+              <div className="relative flex items-center">
+                <div className="absolute left-4 text-indigo-500">
+                  <User className="w-5 h-5 stroke-[2.2]" />
+                </div>
+                <input
+                  type="text"
+                  value={hostName}
+                  onChange={(e) => setHostName(e.target.value)}
+                  placeholder="Enter your name (e.g. Alex)"
+                  className="w-full bg-white pl-12 pr-4 py-3.5 rounded-2xl border border-slate-200/80 text-[#1E1B4B] font-semibold placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 shadow-xs"
+                />
+              </div>
+            </div>
+
             {/* Game Name Input */}
             <div>
               <label className="block text-xs font-bold text-slate-600 uppercase tracking-wider mb-2">
@@ -118,10 +145,10 @@ export const CreateGameScreen: React.FC = () => {
         <div className="relative pt-6">
           <button
             onClick={handleCreate}
-            disabled={!gameName.trim()}
+            disabled={!gameName.trim() || !hostName.trim() || isLoading}
             className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            <span>Create Game</span>
+            <span>{isLoading ? 'Creating...' : 'Create Game'}</span>
             <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
           </button>
 

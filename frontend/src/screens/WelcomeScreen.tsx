@@ -10,6 +10,7 @@ import { UserGuideModal } from '../components/UserGuideModal';
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const currentGame = useGameStore((state) => state.currentGame);
+  const currentPlayerId = useGameStore((state) => state.currentPlayerId);
   const isHost = useGameStore((state) => state.isHost);
   const isSpectator = useGameStore((state) => state.isSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
@@ -19,6 +20,13 @@ export const WelcomeScreen: React.FC = () => {
   // Persistent Device Lock: Auto-resume active game immediately
   useEffect(() => {
     if (currentGame && currentGame.id) {
+      // Safety check: ensure this player is still actually part of the room
+      const isStillInGame = isSpectator || (currentPlayerId && currentGame.players?.some((p) => p.id === currentPlayerId));
+      if (!isStillInGame) {
+        useGameStore.setState({ currentGame: null, currentPlayerId: null, isHost: false, isSpectator: false, spectatorCount: 0 });
+        return;
+      }
+
       connectWebSocket(currentGame.id);
       if (isSpectator) {
         if (currentGame.status === 'completed') {
@@ -38,7 +46,7 @@ export const WelcomeScreen: React.FC = () => {
         navigate(`/results/${currentGame.id}`, { replace: true });
       }
     }
-  }, [currentGame, isHost, isSpectator, connectWebSocket, navigate]);
+  }, [currentGame, currentPlayerId, isHost, isSpectator, connectWebSocket, navigate]);
 
   return (
     <MobileContainer>

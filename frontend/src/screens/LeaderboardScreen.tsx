@@ -21,6 +21,7 @@ export const LeaderboardScreen: React.FC = () => {
   const leaveGame = useGameStore((state) => state.leaveGame);
   const leaveSpectator = useGameStore((state) => state.leaveSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+  const fetchGame = useGameStore((state) => state.fetchGame);
   const toasts = useGameStore((state) => state.toasts);
 
   const [activeTab, setActiveTab] = useState<'overall' | 'rounds'>('overall');
@@ -34,8 +35,9 @@ export const LeaderboardScreen: React.FC = () => {
   React.useEffect(() => {
     if (gameId) {
       connectWebSocket(gameId);
+      fetchGame(gameId);
     }
-  }, [gameId, connectWebSocket]);
+  }, [gameId, connectWebSocket, fetchGame]);
 
   React.useEffect(() => {
     if (currentGame && currentGame.status === 'completed') {
@@ -307,11 +309,11 @@ export const LeaderboardScreen: React.FC = () => {
                           const isHostPlayer = item.player.id === hostId;
                           if (isCurrentUser) {
                             return isHostPlayer
-                              ? `${item.player.name} Host (You)`
+                              ? `${item.player.name} Host (you)`
                               : `${item.player.name} (You)`;
                           }
                           return isHostPlayer
-                            ? `${item.player.name} (Host)`
+                            ? `${item.player.name} Host`
                             : item.player.name;
                         })()}
                       </span>

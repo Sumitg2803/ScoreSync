@@ -21,6 +21,7 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
   const [mode, setMode] = useState<'player' | 'audience' | null>(urlMode || defaultMode || null);
 
   const currentGame = useGameStore((state) => state.currentGame);
+  const currentPlayerId = useGameStore((state) => state.currentPlayerId);
   const isHost = useGameStore((state) => state.isHost);
   const isSpectator = useGameStore((state) => state.isSpectator);
   const joinGame = useGameStore((state) => state.joinGame);
@@ -31,6 +32,11 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
   // Persistent Device Lock: If device is already part of this game, skip joining!
   useEffect(() => {
     if (currentGame && currentGame.id && (!id || id.toUpperCase() === currentGame.id.toUpperCase())) {
+      const isStillInGame = isSpectator || (currentPlayerId && currentGame.players?.some((p) => p.id === currentPlayerId));
+      if (!isStillInGame) {
+        return;
+      }
+
       connectWebSocket(currentGame.id);
       if (isSpectator) {
         if (currentGame.status === 'completed') {
@@ -53,7 +59,7 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
         navigate(`/results/${currentGame.id}`, { replace: true });
       }
     }
-  }, [currentGame, id, isHost, isSpectator, connectWebSocket, navigate]);
+  }, [currentGame, currentPlayerId, id, isHost, isSpectator, connectWebSocket, navigate]);
 
   const [gameId, setGameId] = useState(id || '');
   const [playerName, setPlayerName] = useState('');

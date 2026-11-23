@@ -23,6 +23,8 @@ export const HostDashboardScreen: React.FC = () => {
   const editRound = useGameStore((state) => state.editRound);
   const completeGame = useGameStore((state) => state.completeGame);
   const transferHost = useGameStore((state) => state.transferHost);
+  const startHostRoulette = useGameStore((state) => state.startHostRoulette);
+  const fetchGame = useGameStore((state) => state.fetchGame);
   const setAdmissionLock = useGameStore((state) => state.setAdmissionLock);
   const updateAccessSettings = useGameStore((state) => state.updateAccessSettings);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
@@ -46,8 +48,9 @@ export const HostDashboardScreen: React.FC = () => {
   React.useEffect(() => {
     if (gameId) {
       connectWebSocket(gameId);
+      fetchGame(gameId);
     }
-  }, [gameId, connectWebSocket]);
+  }, [gameId, connectWebSocket, fetchGame]);
 
   const gameTitle = currentGame?.name || 'Friday Game Night';
   const rankings = getRankings();
@@ -120,6 +123,18 @@ export const HostDashboardScreen: React.FC = () => {
       navigate('/');
     } catch (err: any) {
       alert(err.message || 'Failed to transfer host');
+    } finally {
+      setIsTransferring(false);
+    }
+  };
+
+  const handleStartRandomRoulette = async () => {
+    try {
+      setIsTransferring(true);
+      await startHostRoulette();
+      setIsTransferModalOpen(false);
+    } catch (err: any) {
+      alert(err.message || 'Failed to start host roulette');
     } finally {
       setIsTransferring(false);
     }
@@ -258,7 +273,7 @@ export const HostDashboardScreen: React.FC = () => {
                   <div>
                     <span className="font-bold text-sm text-slate-100 block">
                       {item.player.id === (currentGame?.hostId || (currentGame as any)?.host_id)
-                        ? `${item.player.name} Host (You)`
+                        ? `${item.player.name} Host (you)`
                         : item.player.name}
                     </span>
                   </div>
@@ -332,6 +347,7 @@ export const HostDashboardScreen: React.FC = () => {
           onClose={() => setIsTransferModalOpen(false)}
           players={otherPlayers}
           onSelectNewHost={handleSelectNewHost}
+          onStartRandomRoulette={handleStartRandomRoulette}
           isTransferring={isTransferring}
         />
 

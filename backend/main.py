@@ -397,18 +397,9 @@ async def lock_admission(game_id: str, lock: bool, x_host_token: Optional[str] =
     await db.games.update_one({"id": game.id}, {"$set": {"admission_locked": lock}})
     return {"admission_locked": lock}
 
-@app.post("/api/games/{game_id}/transfer-host")
-async def transfer_host(game_id: str, new_host_id: str, x_host_token: Optional[str] = Header(None)):
-    """Transfers host ownership to a chosen player and removes the previous host"""
-    game_dict = await verify_host_token(game_id.upper(), x_host_token)
-    db = get_database()
-    game = GameModel(**game_dict)
-
+async def perform_host_transfer(game: GameModel, new_host: PlayerModel, db):
+    """Core logic to transfer host ownership, scrub old host, and broadcast to all devices"""
     old_host = next((p for p in game.players if p.id == game.host_id), None)
-    new_host = next((p for p in game.players if p.id == new_host_id), None)
-    if not new_host:
-        raise HTTPException(status_code=400, detail="Selected player not found in this game")
-
     old_host_name = old_host.name if old_host else "Previous Host"
     new_host_name = new_host.name
 
@@ -430,6 +421,7 @@ async def transfer_host(game_id: str, new_host_id: str, x_host_token: Optional[s
     game_res = game.dict()
     del game_res["host_token"]
     game_res["leaderboard"] = calculate_leaderboard(game)
+    game_res["spectator_count"] = len(game.spectators)
 
     # Broadcast host transfer event to all connected devices
     await manager.broadcast_game_update(
@@ -441,11 +433,74 @@ async def transfer_host(game_id: str, new_host_id: str, x_host_token: Optional[s
             "newHostToken": new_token,
             "oldHostName": old_host_name,
             "newHostName": new_host_name,
+            "spectator_count": len(game.spectators),
             "message": f"👑 Host Transferred: {new_host_name} is now the Host! {old_host_name} has left."
         }
     )
 
-    return {"status": "transferred", "new_host_id": new_host.id}
+    return {"status": "transferred", "new_host_id": new_host.id, "spectator_count": len(game.spectators)}
+
+@app.post("/api/games/{game_id}/start-host-roulette")
+async def start_host_roulette(game_id: str, x_host_token: Optional[str] = Header(None)):
+    """Initiates a synchronized 5-second random host roulette broadcast to all connected devices"""
+    game_dict = await verify_host_token(game_id.upper(), x_host_token)
+    db = get_database()
+    game = GameModel(**game_dict)
+
+    candidates = [p for p in game.players if p.id != game.host_id]
+    if not candidates:
+        raise HTTPException(status_code=400, detail="No other players available to transfer host to")
+
+    # Pick winner upfront
+    winner = secrets.choice(candidates)
+    old_host = next((p for p in game.players if p.id == game.host_id), None)
+    old_host_name = old_host.name if old_host else "Host"
+
+    # Broadcast HOST_ROULETTE_STARTED to all connected devices (Host, Players, Audience)
+    await manager.broadcast_game_update(
+        game.id,
+        "HOST_ROULETTE_STARTED",
+        game_dict,
+        meta={
+            "candidates": [{"id": p.id, "name": p.name} for p in candidates],
+            "winnerId": winner.id,
+            "winnerName": winner.name,
+            "durationMs": 5000,
+            "oldHostName": old_host_name,
+        }
+    )
+
+    # Schedule background execution of transfer after 5.2 seconds so animation finishes on all screens
+    async def complete_roulette_transfer():
+        await asyncio.sleep(5.2)
+        latest = await db.games.find_one({"id": game.id})
+        if latest:
+            latest_game = GameModel(**latest)
+            w = next((p for p in latest_game.players if p.id == winner.id), None)
+            if w:
+                await perform_host_transfer(latest_game, w, db)
+
+    asyncio.create_task(complete_roulette_transfer())
+
+    return {
+        "status": "roulette_started",
+        "winner_id": winner.id,
+        "winner_name": winner.name,
+        "duration_ms": 5000
+    }
+
+@app.post("/api/games/{game_id}/transfer-host")
+async def transfer_host(game_id: str, new_host_id: str, x_host_token: Optional[str] = Header(None)):
+    """Transfers host ownership manually to a chosen player and removes the previous host"""
+    game_dict = await verify_host_token(game_id.upper(), x_host_token)
+    db = get_database()
+    game = GameModel(**game_dict)
+
+    new_host = next((p for p in game.players if p.id == new_host_id), None)
+    if not new_host:
+        raise HTTPException(status_code=400, detail="Selected player not found in this game")
+
+    return await perform_host_transfer(game, new_host, db)
 
 @app.post("/api/games/{game_id}/leave")
 async def leave_game(game_id: str, player_id: str):

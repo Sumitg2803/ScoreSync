@@ -84,6 +84,7 @@ export const ResultsScreen: React.FC = () => {
       // Player leaves the final results screen: cleanly disconnect without deleting completed scores
       const { disconnectWebSocket } = useGameStore.getState();
       disconnectWebSocket();
+      localStorage.removeItem('scoresync_game_storage');
       useGameStore.setState({ currentGame: null, currentPlayerId: null, isHost: false, isSpectator: false, spectatorCount: 0 });
       navigate('/');
     }

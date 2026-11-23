@@ -8,9 +8,12 @@ import { HostDashboardScreen } from './screens/HostDashboardScreen';
 import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 
+import { HostRouletteOverlay } from './components/HostRouletteOverlay';
+
 export function App() {
   return (
     <BrowserRouter>
+      <HostRouletteOverlay />
       <Routes>
         <Route path="/" element={<WelcomeScreen />} />
         <Route path="/create" element={<CreateGameScreen />} />

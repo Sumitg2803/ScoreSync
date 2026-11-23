@@ -20,6 +20,8 @@ export const WaitingRoomScreen: React.FC = () => {
   const resetCurrentGame = useGameStore((state) => state.resetCurrentGame);
   const updateAccessSettings = useGameStore((state) => state.updateAccessSettings);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+  const fetchGame = useGameStore((state) => state.fetchGame);
+  const currentPlayerId = useGameStore((state) => state.currentPlayerId);
   const toasts = useGameStore((state) => state.toasts);
 
   const [isCancelModalOpen, setIsCancelModalOpen] = useState(false);
@@ -35,8 +37,9 @@ export const WaitingRoomScreen: React.FC = () => {
   React.useEffect(() => {
     if (gameId) {
       connectWebSocket(gameId);
+      fetchGame(gameId);
     }
-  }, [gameId, connectWebSocket]);
+  }, [gameId, connectWebSocket, fetchGame]);
 
   React.useEffect(() => {
     if (currentGame && currentGame.status === 'in_progress') {
@@ -123,18 +126,27 @@ export const WaitingRoomScreen: React.FC = () => {
 
           {/* Real-time Player List Card */}
           <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-4 shadow-lg shadow-indigo-100/60 border border-slate-100 divide-y divide-slate-100">
-            {players.map((player) => (
-              <div key={player.id} className="flex items-center justify-between py-3.5 px-2 first:pt-1 last:pb-1">
-                <div className="flex items-center gap-3.5">
-                  <Avatar name={player.name} size="md" />
-                  <span className="font-bold text-sm text-[#1E1B4B]">{player.name}</span>
+            {players.map((player) => {
+              const hostId = currentGame?.hostId || (currentGame as any)?.host_id;
+              const isHostPlayer = player.id === hostId;
+              const isSelf = player.id === currentPlayerId;
+              const displayName = isSelf
+                ? (isHostPlayer ? `${player.name} Host (you)` : `${player.name} (you)`)
+                : (isHostPlayer ? `${player.name} Host` : player.name);
+
+              return (
+                <div key={player.id} className="flex items-center justify-between py-3.5 px-2 first:pt-1 last:pb-1">
+                  <div className="flex items-center gap-3.5">
+                    <Avatar name={player.name} size="md" />
+                    <span className="font-bold text-sm text-[#1E1B4B]">{displayName}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span className="text-xs font-semibold text-emerald-600">Connected</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-xs font-semibold text-emerald-600">Connected</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 

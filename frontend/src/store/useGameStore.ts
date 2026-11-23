@@ -3,6 +3,15 @@ import { persist } from 'zustand/middleware';
 import type { GameState, ScoringRule, Player, PlayerRanking } from '../types/game';
 import { apiRequest, WS_BASE, getOrCreateDeviceToken } from '../services/api';
 
+export interface HostRouletteState {
+  active: boolean;
+  candidates: { id: string; name: string }[];
+  winnerId: string;
+  winnerName: string;
+  durationMs: number;
+  oldHostName?: string;
+}
+
 interface GameStore {
   currentGame: GameState | null;
   currentPlayerId: string | null;
@@ -13,12 +22,14 @@ interface GameStore {
   isConnected: boolean;
   socket: WebSocket | null;
   toasts: { id: string; type: 'player_joined' | 'player_left' | 'info'; message: string }[];
+  hostRoulette: HostRouletteState | null;
 
   // Actions
   addToast: (type: 'player_joined' | 'player_left' | 'info', message: string) => void;
   removeToast: (id: string) => void;
   setGame: (game: GameState) => void;
   setCurrentPlayer: (playerId: string, isHost?: boolean) => void;
+  fetchGame: (gameId: string) => Promise<GameState>;
   createGame: (name: string, scoringRule: ScoringRule, hostName?: string) => Promise<GameState>;
   joinGame: (gameId: string, playerName: string) => Promise<Player>;
   joinAsSpectator: (gameId: string) => Promise<GameState>;
@@ -31,7 +42,9 @@ interface GameStore {
   editRound: (roundNumber: number, scores: Record<string, number>, note?: string) => Promise<void>;
   completeGame: () => Promise<void>;
   playAgain: () => Promise<void>;
+  startHostRoulette: () => Promise<void>;
   transferHost: (newHostId: string) => Promise<void>;
+  dismissHostRoulette: () => void;
   resetCurrentGame: () => Promise<void>;
   connectWebSocket: (gameId: string) => void;
   disconnectWebSocket: () => void;
@@ -50,6 +63,7 @@ export const useGameStore = create<GameStore>()(
       isConnected: false,
       socket: null,
       toasts: [],
+      hostRoulette: null,
 
       addToast: (type, message) => {
         // Prevent duplicate toasts within a short window
@@ -72,6 +86,13 @@ export const useGameStore = create<GameStore>()(
 
       setGame: (game: GameState) => set({ currentGame: game }),
       setCurrentPlayer: (playerId: string, isHost = false) => set({ currentPlayerId: playerId, isHost }),
+
+      fetchGame: async (gameId: string) => {
+        const data = await apiRequest(`/api/games/${gameId.toUpperCase()}`);
+        const count = data.spectator_count ?? (data.spectators?.length ?? 0);
+        set({ currentGame: data, spectatorCount: count });
+        return data;
+      },
 
       createGame: async (name: string, scoringRule: ScoringRule, hostName = 'Host') => {
         const data = await apiRequest('/api/games/create', {
@@ -146,6 +167,7 @@ export const useGameStore = create<GameStore>()(
           }
         }
         localStorage.removeItem('scoresync_device_token');
+        localStorage.removeItem('scoresync_game_storage');
         get().disconnectWebSocket();
         set({ currentGame: null, currentPlayerId: null, isHost: false, isSpectator: false, spectatorCount: 0 });
       },
@@ -163,6 +185,7 @@ export const useGameStore = create<GameStore>()(
           }
         }
         localStorage.removeItem('scoresync_device_token');
+        localStorage.removeItem('scoresync_game_storage');
         get().disconnectWebSocket();
         set({
           currentGame: null,
@@ -236,15 +259,41 @@ export const useGameStore = create<GameStore>()(
         set({ currentGame: updated });
       },
 
+      startHostRoulette: async () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+        await apiRequest(`/api/games/${currentGame.id}/start-host-roulette`, {
+          method: 'POST',
+        });
+      },
+
+      dismissHostRoulette: () => {
+        set({ hostRoulette: null });
+      },
+
       transferHost: async (newHostId: string) => {
         const { currentGame } = get();
         if (!currentGame) return;
-        await apiRequest(`/api/games/${currentGame.id}/transfer-host?new_host_id=${newHostId}`, {
+        const gameId = currentGame.id;
+
+        // Disconnect WebSocket immediately so incoming broadcasts don't re-pollute state
+        get().disconnectWebSocket();
+        localStorage.removeItem('scoresync_host_token');
+        localStorage.removeItem('scoresync_game_storage');
+        set({
+          currentGame: null,
+          currentPlayerId: null,
+          hostToken: null,
+          isHost: false,
+          isSpectator: false,
+          spectatorCount: 0,
+          hostRoulette: null,
+          toasts: [],
+        });
+
+        await apiRequest(`/api/games/${gameId}/transfer-host?new_host_id=${newHostId}`, {
           method: 'POST',
         });
-        localStorage.removeItem('scoresync_host_token');
-        get().disconnectWebSocket();
-        set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false });
       },
 
       resetCurrentGame: async () => {
@@ -292,15 +341,60 @@ export const useGameStore = create<GameStore>()(
               }
             }
 
+            if (data.event === 'HOST_ROULETTE_STARTED' && data.meta) {
+              set({
+                hostRoulette: {
+                  active: true,
+                  candidates: data.meta.candidates || [],
+                  winnerId: data.meta.winnerId,
+                  winnerName: data.meta.winnerName,
+                  durationMs: data.meta.durationMs || 5000,
+                  oldHostName: data.meta.oldHostName || 'Host',
+                },
+              });
+            }
+
             if (data.event === 'HOST_TRANSFERRED' && data.meta) {
-              const { currentPlayerId } = get();
-              // If this device is the chosen new host, upgrade rights and persist new host token
-              if (data.meta.newHostId === currentPlayerId) {
-                localStorage.setItem('scoresync_host_token', data.meta.newHostToken);
-                set({ isHost: true, hostToken: data.meta.newHostToken });
-                window.location.href = `/host-dashboard/${data.game.id}`;
+              const { currentPlayerId, isHost } = get();
+
+              // If this device was the OLD host that transferred and left:
+              if (isHost && data.meta.newHostId !== currentPlayerId) {
+                get().disconnectWebSocket();
+                localStorage.removeItem('scoresync_host_token');
+                localStorage.removeItem('scoresync_game_storage');
+                set({
+                  currentGame: null,
+                  currentPlayerId: null,
+                  hostToken: null,
+                  isHost: false,
+                  isSpectator: false,
+                  spectatorCount: 0,
+                  hostRoulette: null,
+                  toasts: [],
+                });
+                window.location.href = '/';
                 return;
               }
+
+              // If this device is the chosen NEW host, upgrade rights and persist new host token
+              if (data.meta.newHostId === currentPlayerId) {
+                localStorage.setItem('scoresync_host_token', data.meta.newHostToken);
+                const count = data.game?.spectator_count ?? (data.meta.spectator_count ?? get().spectatorCount);
+                set({
+                  currentGame: data.game,
+                  isHost: true,
+                  hostToken: data.meta.newHostToken,
+                  spectatorCount: count,
+                  hostRoulette: null,
+                });
+                get().addToast('info', '👑 You are now the Host!');
+                setTimeout(() => {
+                  window.location.href = `/host-dashboard/${data.game.id}`;
+                }, 1200);
+                return;
+              }
+
+              set({ hostRoulette: null });
               get().addToast('info', data.meta.message);
             } else if (data.event === 'PLAYER_JOINED' && data.meta?.message) {
               get().addToast('player_joined', data.meta.message);
