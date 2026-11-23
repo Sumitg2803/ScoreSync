@@ -51,6 +51,10 @@ interface GameStore {
   getRankings: () => PlayerRanking[];
 }
 
+let wsHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
+let wsReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+let wsVisibilityListenerAttached = false;
+
 export const useGameStore = create<GameStore>()(
   persist(
     (set, get) => ({
@@ -316,6 +320,11 @@ export const useGameStore = create<GameStore>()(
       },
 
       connectWebSocket: (gameId: string) => {
+        if (wsReconnectTimer) {
+          clearTimeout(wsReconnectTimer);
+          wsReconnectTimer = null;
+        }
+
         const { socket } = get();
         if (socket) {
           socket.close();
@@ -326,6 +335,13 @@ export const useGameStore = create<GameStore>()(
 
         ws.onopen = () => {
           set({ isConnected: true });
+          // Heartbeat ping every 25 seconds to keep Render connection alive indefinitely
+          if (wsHeartbeatTimer) clearInterval(wsHeartbeatTimer);
+          wsHeartbeatTimer = setInterval(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+              ws.send('ping');
+            }
+          }, 25000);
         };
 
         ws.onmessage = (event) => {
@@ -337,6 +353,13 @@ export const useGameStore = create<GameStore>()(
               get().disconnectWebSocket();
               set({ currentGame: null, currentPlayerId: null, hostToken: null, isHost: false, isSpectator: false, spectatorCount: 0 });
               window.location.href = '/';
+              return;
+            }
+
+            // Immediate state hydration on connect
+            if (data.event === 'SYNC_STATE' && data.game) {
+              const count = data.game.spectator_count ?? (data.game.spectators?.length ?? get().spectatorCount);
+              set({ currentGame: data.game, spectatorCount: count });
               return;
             }
 
@@ -418,12 +441,51 @@ export const useGameStore = create<GameStore>()(
 
         ws.onclose = () => {
           set({ isConnected: false, socket: null });
+          if (wsHeartbeatTimer) {
+            clearInterval(wsHeartbeatTimer);
+            wsHeartbeatTimer = null;
+          }
+
+          // Resilient auto-reconnect: if game is still active, retry in 1.5s
+          if (wsReconnectTimer) clearTimeout(wsReconnectTimer);
+          const { currentGame } = get();
+          if (currentGame && currentGame.id === gameId) {
+            wsReconnectTimer = setTimeout(() => {
+              get().connectWebSocket(gameId);
+            }, 1500);
+          }
         };
 
         set({ socket: ws });
+
+        // Visibility & focus listener: catch up immediately when user returns to this tab or unlocks screen
+        if (!wsVisibilityListenerAttached && typeof document !== 'undefined') {
+          wsVisibilityListenerAttached = true;
+          const handleWakeup = () => {
+            if (document.visibilityState === 'visible') {
+              const { currentGame: activeGame, socket: activeSocket, isConnected: connected } = get();
+              if (activeGame && activeGame.id) {
+                if (!activeSocket || !connected || activeSocket.readyState !== WebSocket.OPEN) {
+                  get().connectWebSocket(activeGame.id);
+                }
+                get().fetchGame(activeGame.id).catch(() => {});
+              }
+            }
+          };
+          document.addEventListener('visibilitychange', handleWakeup);
+          window.addEventListener('focus', handleWakeup);
+        }
       },
 
       disconnectWebSocket: () => {
+        if (wsHeartbeatTimer) {
+          clearInterval(wsHeartbeatTimer);
+          wsHeartbeatTimer = null;
+        }
+        if (wsReconnectTimer) {
+          clearTimeout(wsReconnectTimer);
+          wsReconnectTimer = null;
+        }
         const { socket } = get();
         if (socket) {
           socket.close();

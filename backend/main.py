@@ -55,24 +55,36 @@ class ConnectionManager:
                 del self.active_rooms[game_id]
 
     async def broadcast_game_update(self, game_id: str, event_type: str, game_data: dict, meta: Optional[dict] = None):
-        if game_id in self.active_rooms:
-            # Strip MongoDB _id if present to guarantee clean JSON serialization
-            clean_game_data = {k: v for k, v in game_data.items() if k != "_id"}
-            message = {
-                "event": event_type,
-                "game": clean_game_data,
-                "meta": meta or {},
-                "timestamp": datetime.utcnow().isoformat()
-            }
+        if game_id not in self.active_rooms:
+            return
+
+        connections = list(self.active_rooms.get(game_id, []))
+        if not connections:
+            return
+
+        # Strip MongoDB _id if present to guarantee clean JSON serialization
+        clean_game_data = {k: v for k, v in game_data.items() if k != "_id"}
+        message = {
+            "event": event_type,
+            "game": clean_game_data,
+            "meta": meta or {},
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        try:
+            payload = json.dumps(message, default=str)
+        except Exception as e:
+            print(f"Error encoding broadcast payload: {e}")
+            return
+
+        async def send_to_client(ws: WebSocket):
             try:
-                payload = json.dumps(message, default=str)
-                for connection in list(self.active_rooms[game_id]):
-                    try:
-                        await connection.send_text(payload)
-                    except Exception:
-                        pass
-            except Exception as e:
-                print(f"Error broadcasting game update: {e}")
+                await ws.send_text(payload)
+            except Exception:
+                # Prune dead/stale socket immediately
+                self.disconnect(game_id, ws)
+
+        # Broadcast concurrently to all connected clients in parallel without blocking
+        await asyncio.gather(*[send_to_client(conn) for conn in connections], return_exceptions=True)
 
 manager = ConnectionManager()
 
@@ -700,12 +712,28 @@ async def reset_current_game(game_id: str, x_host_token: Optional[str] = Header(
 async def game_websocket_endpoint(websocket: WebSocket, game_id: str):
     await manager.connect(game_id.upper(), websocket)
     try:
+        # Push immediate state hydration to newly connected or reconnected client
+        db = get_database()
+        game_dict = await db.games.find_one({"id": game_id.upper()})
+        if game_dict:
+            game = GameModel(**game_dict)
+            game_res = game.dict()
+            del game_res["host_token"]
+            game_res["leaderboard"] = calculate_leaderboard(game)
+            game_res["spectator_count"] = len(game.spectators)
+            sync_msg = {
+                "event": "SYNC_STATE",
+                "game": game_res,
+                "timestamp": datetime.utcnow().isoformat()
+            }
+            await websocket.send_text(json.dumps(sync_msg, default=str))
+
         while True:
             # Keep socket alive; clients can send heartbeat pings
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, Exception):
         manager.disconnect(game_id.upper(), websocket)
 
 # ----------------- Serve Frontend (Single-Service Monolith) -----------------
