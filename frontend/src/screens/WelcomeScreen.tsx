@@ -3,14 +3,17 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { TrophyIllustration, GameControllerAccent } from '../components/Illustrations';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowRight, QrCode } from 'lucide-react';
+import { ArrowRight, QrCode, BookOpen } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { UserGuideModal } from '../components/UserGuideModal';
 
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
   const currentGame = useGameStore((state) => state.currentGame);
   const isHost = useGameStore((state) => state.isHost);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+
+  const [isGuideOpen, setIsGuideOpen] = React.useState(false);
 
   // Persistent Device Lock: Auto-resume active game immediately
   useEffect(() => {
@@ -96,8 +99,23 @@ export const WelcomeScreen: React.FC = () => {
             <span>Join Game</span>
           </button>
 
+          {/* User Guide Pill Button (Only on Home Screen) */}
+          <button
+            onClick={() => setIsGuideOpen(true)}
+            className="w-full py-2.5 px-4 rounded-xl bg-indigo-50/70 text-indigo-700 font-bold text-xs border border-indigo-100/80 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:bg-indigo-100/60"
+          >
+            <BookOpen className="w-4 h-4 text-indigo-600" />
+            <span>How to Play • User Guide</span>
+          </button>
+
           <GameControllerAccent className="absolute -bottom-8 -right-4" />
         </motion.div>
+
+        {/* User Guide Modal */}
+        <UserGuideModal
+          isOpen={isGuideOpen}
+          onClose={() => setIsGuideOpen(false)}
+        />
       </div>
     </MobileContainer>
   );
