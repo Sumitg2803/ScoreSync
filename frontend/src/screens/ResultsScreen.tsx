@@ -7,6 +7,9 @@ import { Eye } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { calculateGameBadges } from '../utils/badgeCalculations';
 import { GameBadgesSection } from '../components/GameBadgesSection';
+import { SoundToggleButton } from '../components/SoundToggleButton';
+import { soundEffects } from '../utils/soundEffects';
+import { FloatingReactionsCanvas, EmojiReactionDock } from '../components/EmojiReactions';
 
 export const ResultsScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -49,6 +52,9 @@ export const ResultsScreen: React.FC = () => {
   }, [currentGame, rankings]);
 
   useEffect(() => {
+    // Play celebratory victory fanfare
+    soundEffects.playVictoryFanfare();
+
     // Grand celebration confetti
     const end = Date.now() + 2 * 1000;
     const frame = () => {
@@ -102,9 +108,10 @@ export const ResultsScreen: React.FC = () => {
       <div className="flex-1 flex flex-col justify-between p-5 pt-6 pb-6 text-center relative overflow-hidden">
         {/* Scrollable Main Content */}
         <div className="flex-1 overflow-y-auto pr-0.5 space-y-3">
-          {/* Top Floating Eye Counter (Only when viewers are watching) */}
-          {spectatorCount > 0 && (
-            <div className="flex justify-end">
+          {/* Top Floating Action Bar: Sound Mute & Eye Counter */}
+          <div className="flex items-center justify-end gap-1.5 mb-1">
+            <SoundToggleButton />
+            {spectatorCount > 0 && (
               <div
                 className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
                 title="Live Viewers"
@@ -112,8 +119,8 @@ export const ResultsScreen: React.FC = () => {
                 <Eye className="w-3.5 h-3.5 text-indigo-600 stroke-[2.5]" />
                 <span>{spectatorCount}</span>
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Celebration Header */}
           <div>
@@ -188,8 +195,16 @@ export const ResultsScreen: React.FC = () => {
           </div>
         </div>
 
+        {/* Floating Reactions Canvas */}
+        <FloatingReactionsCanvas />
+
         {/* Bottom Actions */}
         <div className="space-y-2.5 pt-3 border-t border-slate-100/80 bg-white/40 backdrop-blur-xs">
+          {/* Reaction Bar */}
+          <div className="flex justify-center">
+            <EmojiReactionDock />
+          </div>
+
           {isHost ? (
             <button
               onClick={handlePlayAgain}

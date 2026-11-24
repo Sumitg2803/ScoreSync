@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { GameState, ScoringRule, Player, PlayerRanking } from '../types/game';
 import { apiRequest, WS_BASE, getOrCreateDeviceToken } from '../services/api';
+import { soundEffects } from '../utils/soundEffects';
 
 export interface HostRouletteState {
   active: boolean;
@@ -23,6 +24,7 @@ interface GameStore {
   socket: WebSocket | null;
   toasts: { id: string; type: 'player_joined' | 'player_left' | 'info'; message: string }[];
   hostRoulette: HostRouletteState | null;
+  latestReaction: { id: string; emoji: string; timestamp: number } | null;
 
   // Actions
   addToast: (type: 'player_joined' | 'player_left' | 'info', message: string) => void;
@@ -45,6 +47,7 @@ interface GameStore {
   startHostRoulette: () => Promise<void>;
   transferHost: (newHostId: string) => Promise<void>;
   dismissHostRoulette: () => void;
+  sendReaction: (emoji: string) => void;
   resetCurrentGame: () => Promise<void>;
   connectWebSocket: (gameId: string) => void;
   disconnectWebSocket: () => void;
@@ -68,6 +71,7 @@ export const useGameStore = create<GameStore>()(
       socket: null,
       toasts: [],
       hostRoulette: null,
+      latestReaction: null,
 
       addToast: (type, message) => {
         // Prevent duplicate toasts within a short window
@@ -277,6 +281,13 @@ export const useGameStore = create<GameStore>()(
         set({ hostRoulette: null });
       },
 
+      sendReaction: (emoji: string) => {
+        const { socket } = get();
+        if (socket && socket.readyState === WebSocket.OPEN) {
+          socket.send(JSON.stringify({ action: 'reaction', emoji }));
+        }
+      },
+
       transferHost: async (newHostId: string) => {
         const { currentGame, hostToken } = get();
         if (!currentGame) return;
@@ -360,6 +371,19 @@ export const useGameStore = create<GameStore>()(
             if (data.event === 'SYNC_STATE' && data.game) {
               const count = data.game.spectator_count ?? (data.game.spectators?.length ?? get().spectatorCount);
               set({ currentGame: data.game, spectatorCount: count });
+              return;
+            }
+
+            // Live floating emoji reaction from viewer or player
+            if (data.event === 'EMOJI_REACTION' && data.meta?.emoji) {
+              soundEffects.playReactionPop();
+              set({
+                latestReaction: {
+                  id: data.meta.id || Math.random().toString(),
+                  emoji: data.meta.emoji,
+                  timestamp: Date.now(),
+                },
+              });
               return;
             }
 

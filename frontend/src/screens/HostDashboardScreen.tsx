@@ -10,6 +10,8 @@ import { TransferHostModal } from '../components/TransferHostModal';
 import { CompleteGameModal } from '../components/CompleteGameModal';
 import { HostSettingsModal } from '../components/HostSettingsModal';
 import { ToastContainer } from '../components/ToastContainer';
+import { SoundToggleButton } from '../components/SoundToggleButton';
+import { soundEffects } from '../utils/soundEffects';
 import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut, Eye, Settings, Lock } from 'lucide-react';
 
 export const HostDashboardScreen: React.FC = () => {
@@ -80,6 +82,7 @@ export const HostDashboardScreen: React.FC = () => {
 
   const handleSaveRound = async (scores: Record<string, number>) => {
     await addRound(scores);
+    soundEffects.playRoundSaved();
     await setAdmissionLock(false);
     setIsAddSheetOpen(false);
   };
@@ -179,6 +182,9 @@ export const HostDashboardScreen: React.FC = () => {
                   <QrCode className="w-3.5 h-3.5 text-indigo-400" />
                 </button>
               )}
+
+              {/* Sound FX Mute Toggle Button */}
+              <SoundToggleButton dark />
 
               {/* Host Settings Button (⚙️) */}
               <button

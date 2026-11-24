@@ -729,10 +729,24 @@ async def game_websocket_endpoint(websocket: WebSocket, game_id: str):
             await websocket.send_text(json.dumps(sync_msg, default=str))
 
         while True:
-            # Keep socket alive; clients can send heartbeat pings
+            # Keep socket alive; clients can send heartbeat pings or reactions
             data = await websocket.receive_text()
             if data == "ping":
                 await websocket.send_text("pong")
+            else:
+                try:
+                    payload = json.loads(data)
+                    if payload.get("action") == "reaction":
+                        emoji = payload.get("emoji")
+                        if emoji and isinstance(emoji, str) and len(emoji) <= 4:
+                            await manager.broadcast_game_update(
+                                game_id.upper(),
+                                "EMOJI_REACTION",
+                                {},
+                                meta={"emoji": emoji, "id": secrets.token_hex(4)}
+                            )
+                except Exception:
+                    pass
     except (WebSocketDisconnect, Exception):
         manager.disconnect(game_id.upper(), websocket)
 

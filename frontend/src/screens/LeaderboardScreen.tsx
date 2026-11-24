@@ -6,6 +6,9 @@ import { TrophyIllustration } from '../components/Illustrations';
 import { GameCodeModal } from '../components/GameCodeModal';
 import { ExitConfirmModal } from '../components/ExitConfirmModal';
 import { ToastContainer } from '../components/ToastContainer';
+import { SoundToggleButton } from '../components/SoundToggleButton';
+import { soundEffects } from '../utils/soundEffects';
+import { FloatingReactionsCanvas, EmojiReactionDock } from '../components/EmojiReactions';
 import { ArrowLeft, Crown, BarChart3, QrCode, LogOut, Eye, Lock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
@@ -45,6 +48,16 @@ export const LeaderboardScreen: React.FC = () => {
     }
   }, [currentGame?.status, gameId, navigate]);
 
+  // Play gentle chime when a new round is recorded
+  const prevRoundsCountRef = React.useRef(currentGame?.rounds?.length || 0);
+  React.useEffect(() => {
+    const currentCount = currentGame?.rounds?.length || 0;
+    if (currentCount > prevRoundsCountRef.current) {
+      soundEffects.playRoundSaved();
+    }
+    prevRoundsCountRef.current = currentCount;
+  }, [currentGame?.rounds?.length]);
+
   const handleConfirmExit = async () => {
     if (isSpectator) {
       await leaveSpectator();
@@ -82,6 +95,7 @@ export const LeaderboardScreen: React.FC = () => {
             )}
 
             <div className="flex items-center gap-1.5">
+              <SoundToggleButton />
               {spectatorCount > 0 && (
                 <div
                   className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white shadow-xs border border-slate-200/80 text-slate-700 text-xs font-bold"
@@ -126,7 +140,14 @@ export const LeaderboardScreen: React.FC = () => {
               <span className="w-2 h-2 rounded-full bg-indigo-600 animate-ping"></span>
               <span>Host is setting up the next match...</span>
             </div>
+
+            {/* Live Emoji Reactions Dock for Spectators */}
+            <div className="mt-6">
+              <EmojiReactionDock />
+            </div>
           </div>
+
+          <FloatingReactionsCanvas />
 
           {/* Bottom Game ID Chip */}
           <div className="text-center text-[11px] font-bold text-slate-400">
@@ -213,6 +234,9 @@ export const LeaderboardScreen: React.FC = () => {
                   <span>{spectatorCount}</span>
                 </div>
               )}
+
+              {/* Sound FX Mute Toggle Button */}
+              <SoundToggleButton />
 
               {/* Exit Game Button */}
               <button
@@ -340,8 +364,16 @@ export const LeaderboardScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* Bottom Current Round Status Chip */}
-        <div className="pt-4 flex justify-between items-center">
+        {/* Floating Reactions Canvas */}
+        <FloatingReactionsCanvas />
+
+        {/* Bottom Current Round Status Chip & Floating Reaction Bar */}
+        <div className="pt-3 space-y-2">
+          {/* Reaction Bar */}
+          <div className="flex justify-center">
+            <EmojiReactionDock />
+          </div>
+
           <div className="flex items-center justify-between w-full bg-white px-5 py-3 rounded-2xl border border-slate-100 shadow-xs">
             <span className="text-xs font-bold text-slate-700">
               {completedRoundsCount === 0

@@ -3,6 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { Avatar } from './Avatar';
 import { Crown, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { soundEffects } from '../utils/soundEffects';
 
 export const HostRouletteOverlay: React.FC = () => {
   const hostRoulette = useGameStore((state) => state.hostRoulette);
@@ -33,11 +34,13 @@ export const HostRouletteOverlay: React.FC = () => {
       if (elapsed >= durationMs) {
         setHighlightedIndex(targetIdx);
         setIsLanded(true);
+        soundEffects.playRouletteTick(true);
         return;
       }
 
       currentIndex = (currentIndex + 1) % candidates.length;
       setHighlightedIndex(currentIndex);
+      soundEffects.playRouletteTick(false);
 
       // Decelerate from 70ms up to 320ms towards the end
       const delay = 70 + Math.pow(progress, 2.2) * 260;
