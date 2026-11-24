@@ -344,7 +344,7 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-purple-600 via-indigo-600 to-violet-700 text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-base shadow-lg shadow-purple-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >
                   <Eye className="w-5 h-5 stroke-[2.5]" />
                   <span>{isLoading ? 'Joining Audience...' : 'Watch Game'}</span>
@@ -402,7 +402,7 @@ export const JoinGameScreen: React.FC<JoinGameScreenProps> = ({ defaultMode }) =
                 <button
                   type="submit"
                   disabled={isLoading}
-                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
+                  className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-base shadow-lg shadow-purple-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60"
                 >
                   <span>{isLoading ? 'Joining...' : 'Join as Player'}</span>
                   <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />

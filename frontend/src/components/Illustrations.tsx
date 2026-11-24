@@ -82,15 +82,15 @@ export const GameControllerAccent: React.FC<{ className?: string }> = ({ classNa
       <svg width="100" height="70" viewBox="0 0 100 70" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
           d="M20 15C20 6.71573 26.7157 0 35 0H65C73.2843 0 80 6.71573 80 15V35C80 48.8071 68.8071 60 55 60H53C49.134 60 45.6416 57.8115 44 54.4952L40.5 47.5C39.5 45.5 37 45.5 36 47.5L32.5 54.4952C30.8584 57.8115 27.366 60 23.5 60H21C11.6112 60 4 52.3888 4 43V31C4 22.1634 11.1634 15 20 15Z"
-          fill="#818CF8"
-          fillOpacity="0.35"
+          fill="#A855F7"
+          fillOpacity="0.3"
         />
         {/* D-Pad */}
-        <rect x="22" y="24" width="6" height="16" rx="2" fill="#4F46E5" fillOpacity="0.6" />
-        <rect x="17" y="29" width="16" height="6" rx="2" fill="#4F46E5" fillOpacity="0.6" />
+        <rect x="22" y="24" width="6" height="16" rx="2" fill="#7016E6" fillOpacity="0.6" />
+        <rect x="17" y="29" width="16" height="6" rx="2" fill="#7016E6" fillOpacity="0.6" />
         {/* Action Buttons */}
-        <circle cx="65" cy="27" r="3.5" fill="#4F46E5" fillOpacity="0.6" />
-        <circle cx="73" cy="33" r="3.5" fill="#4F46E5" fillOpacity="0.6" />
+        <circle cx="65" cy="27" r="3.5" fill="#7016E6" fillOpacity="0.6" />
+        <circle cx="73" cy="33" r="3.5" fill="#7016E6" fillOpacity="0.6" />
       </svg>
     </div>
   );

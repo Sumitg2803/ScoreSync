@@ -1,11 +1,12 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
-import { TrophyIllustration, GameControllerAccent } from '../components/Illustrations';
+import { GameControllerAccent } from '../components/Illustrations';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowRight, QrCode, BookOpen, Eye, Gamepad2 } from 'lucide-react';
+import { ArrowRight, BookOpen, Eye, Gamepad2, Smartphone, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { UserGuideModal } from '../components/UserGuideModal';
+import { InstallPwaModal, usePwaInstall } from '../components/InstallPwaModal';
 
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -15,7 +16,9 @@ export const WelcomeScreen: React.FC = () => {
   const isSpectator = useGameStore((state) => state.isSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
 
-  const [isGuideOpen, setIsGuideOpen] = React.useState(false);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const { isInstalled, isIos, promptInstall } = usePwaInstall();
 
   // Persistent Device Lock: Auto-resume active game immediately
   useEffect(() => {
@@ -51,25 +54,39 @@ export const WelcomeScreen: React.FC = () => {
   return (
     <MobileContainer>
       <div className="flex-1 flex flex-col justify-between p-6 pt-12 pb-8">
-        {/* Top Status Bar Placeholder */}
-        <div className="flex justify-between items-center text-xs font-semibold text-slate-400 px-1">
-          <span>9:41</span>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-            <span className="w-2 h-2 rounded-full bg-slate-300"></span>
-            <span className="w-4 h-2 rounded-full bg-slate-400"></span>
+        {/* Top Header Bar */}
+        <div className="flex justify-between items-center text-xs font-semibold px-1">
+          <div className="flex items-center gap-1.5 text-purple-950 font-bold tracking-wide">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>ScoreSync Live</span>
           </div>
+          {!isInstalled && (
+            <button
+              onClick={() => setIsInstallModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 font-bold hover:bg-purple-200/80 transition cursor-pointer shadow-2xs"
+              title="Install App"
+            >
+              <Download className="w-3.5 h-3.5 text-purple-700" />
+              <span>Install App</span>
+            </button>
+          )}
         </div>
 
-        {/* Center Hero Section */}
+        {/* Center Hero Section with Official Logo */}
         <div className="flex-1 flex flex-col items-center justify-center my-auto text-center">
           <motion.div
             initial={{ scale: 0.85, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             transition={{ duration: 0.5, ease: 'easeOut' }}
-            className="mb-6"
+            className="mb-5 relative"
           >
-            <TrophyIllustration size={110} />
+            {/* Ambient ultraviolet glow behind logo */}
+            <div className="absolute inset-0 bg-[#7016E6]/25 rounded-full blur-2xl transform scale-125 pointer-events-none" />
+            <img
+              src="/logo.png"
+              alt="ScoreSync Logo"
+              className="w-32 h-32 object-contain relative z-10 drop-shadow-2xl"
+            />
           </motion.div>
 
           <motion.h1
@@ -85,7 +102,7 @@ export const WelcomeScreen: React.FC = () => {
             initial={{ y: 15, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             transition={{ delay: 0.25, duration: 0.4 }}
-            className="text-sm font-semibold tracking-wider text-indigo-900/60 uppercase"
+            className="text-sm font-semibold tracking-wider text-purple-900/70 uppercase"
           >
             Play • Score • Enjoy
           </motion.p>
@@ -98,10 +115,10 @@ export const WelcomeScreen: React.FC = () => {
           transition={{ delay: 0.35, duration: 0.4 }}
           className="space-y-3.5 relative"
         >
-          {/* Create Game Button (Primary violet/purple gradient) */}
+          {/* Create Game Button (Primary signature violet/purple gradient) */}
           <button
             onClick={() => navigate('/create')}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:shadow-indigo-500/40"
+            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-base shadow-lg shadow-purple-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:shadow-purple-600/45"
           >
             <span>Create Game</span>
             <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
@@ -110,29 +127,41 @@ export const WelcomeScreen: React.FC = () => {
           {/* Join Game Button (Secondary white card pill - for Players) */}
           <button
             onClick={() => navigate('/join?mode=player')}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-[#1E1B4B] font-bold text-base shadow-md shadow-indigo-100/70 border border-slate-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-slate-50"
+            className="w-full py-3.5 px-6 rounded-2xl bg-white text-[#1E1B4B] font-bold text-base shadow-md shadow-purple-100/70 border border-purple-100/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-purple-50/50"
           >
-            <Gamepad2 className="w-5 h-5 text-indigo-600 stroke-[2.2]" />
+            <Gamepad2 className="w-5 h-5 text-purple-700 stroke-[2.2]" />
             <span>Join Game</span>
           </button>
 
           {/* Join as Audience Button (Secondary pill - for Spectators) */}
           <button
             onClick={() => navigate('/join?mode=audience')}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-indigo-950 font-bold text-base shadow-md shadow-indigo-100/70 border border-indigo-100 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-indigo-50/50"
+            className="w-full py-3.5 px-6 rounded-2xl bg-white text-purple-950 font-bold text-base shadow-md shadow-purple-100/70 border border-purple-100/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-purple-50/50"
           >
-            <Eye className="w-5 h-5 text-purple-600 stroke-[2.2]" />
+            <Eye className="w-5 h-5 text-[#8625FF] stroke-[2.2]" />
             <span>Join as Audience</span>
           </button>
 
-          {/* User Guide Pill Button (Only on Home Screen) */}
-          <button
-            onClick={() => setIsGuideOpen(true)}
-            className="w-full py-2.5 px-4 rounded-xl bg-indigo-50/70 text-indigo-700 font-bold text-xs border border-indigo-100/80 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:bg-indigo-100/60"
-          >
-            <BookOpen className="w-4 h-4 text-indigo-600" />
-            <span>How to Play • User Guide</span>
-          </button>
+          {/* User Guide & Install Row */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => setIsGuideOpen(true)}
+              className="flex-1 py-2.5 px-3 rounded-xl bg-purple-100/50 text-purple-900 font-bold text-xs border border-purple-200/60 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-100/80"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-purple-700" />
+              <span>User Guide</span>
+            </button>
+
+            {!isInstalled && (
+              <button
+                onClick={() => setIsInstallModalOpen(true)}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-purple-100/70 text-purple-900 font-bold text-xs border border-purple-200/80 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-200/70"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-purple-700" />
+                <span>Install App</span>
+              </button>
+            )}
+          </div>
 
           <GameControllerAccent className="absolute -bottom-8 -right-4" />
         </motion.div>
@@ -141,6 +170,14 @@ export const WelcomeScreen: React.FC = () => {
         <UserGuideModal
           isOpen={isGuideOpen}
           onClose={() => setIsGuideOpen(false)}
+        />
+
+        {/* PWA Install Modal */}
+        <InstallPwaModal
+          isOpen={isInstallModalOpen}
+          onClose={() => setIsInstallModalOpen(false)}
+          promptInstall={promptInstall}
+          isIos={isIos}
         />
       </div>
     </MobileContainer>

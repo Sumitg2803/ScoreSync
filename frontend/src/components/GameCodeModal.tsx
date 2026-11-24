@@ -74,7 +74,7 @@ export const GameCodeModal: React.FC<GameCodeModalProps> = ({
         {/* Share Button */}
         <button
           onClick={handleShare}
-          className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-xs shadow-md shadow-indigo-500/25 flex items-center justify-center gap-1.5 cursor-pointer"
+          className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-xs shadow-md shadow-purple-600/30 flex items-center justify-center gap-1.5 cursor-pointer"
         >
           <Share2 className="w-4 h-4" />
           <span>Share Joining Link</span>

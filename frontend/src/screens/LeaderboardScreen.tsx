@@ -121,11 +121,16 @@ export const LeaderboardScreen: React.FC = () => {
           <div className="flex-1 flex flex-col items-center justify-center text-center my-auto px-4">
             <motion.div
               initial={{ scale: 0.85, opacity: 0 }}
-              animate={{ scale: [1, 1.05, 1], opacity: 1 }}
+              animate={{ scale: [1, 1.04, 1], opacity: 1 }}
               transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-              className="mb-6"
+              className="mb-6 relative"
             >
-              <TrophyIllustration size={110} />
+              <div className="absolute inset-0 bg-[#7016E6]/25 rounded-full blur-2xl transform scale-125 pointer-events-none" />
+              <img
+                src="/logo.png"
+                alt="ScoreSync Logo"
+                className="w-28 h-28 object-contain relative z-10 drop-shadow-xl"
+              />
             </motion.div>
 
             <h1 className="text-4xl font-extrabold tracking-tight text-[#1E1B4B] mb-2">
@@ -260,13 +265,13 @@ export const LeaderboardScreen: React.FC = () => {
           </div>
 
           {/* Overall vs Rounds Segmented Toggle */}
-          <div className="flex bg-slate-200/60 p-1 rounded-2xl mb-4 max-w-[220px] mx-auto">
+          <div className="flex bg-purple-100/70 p-1 rounded-2xl mb-4 max-w-[220px] mx-auto border border-purple-200/50">
             <button
               onClick={() => setActiveTab('overall')}
               className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
                 activeTab === 'overall'
-                  ? 'bg-gradient-to-r from-[#6366F1] to-[#7C3AED] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white shadow-xs'
+                  : 'text-purple-900/70 hover:text-purple-950'
               }`}
             >
               Overall
@@ -275,8 +280,8 @@ export const LeaderboardScreen: React.FC = () => {
               onClick={() => setActiveTab('rounds')}
               className={`flex-1 py-1.5 text-xs font-bold rounded-xl transition cursor-pointer ${
                 activeTab === 'rounds'
-                  ? 'bg-gradient-to-r from-[#6366F1] to-[#7C3AED] text-white shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
+                  ? 'bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white shadow-xs'
+                  : 'text-purple-900/70 hover:text-purple-950'
               }`}
             >
               Rounds

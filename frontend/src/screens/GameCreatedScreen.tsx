@@ -65,7 +65,7 @@ export const GameCreatedScreen: React.FC = () => {
               fgColor="#1E1B4B"
             />
             {/* Center link badge */}
-            <div className="absolute w-10 h-10 bg-gradient-to-tr from-[#6366F1] to-[#7C3AED] rounded-full flex items-center justify-center shadow-md border-2 border-white">
+            <div className="absolute w-10 h-10 bg-gradient-to-tr from-[#4A10A8] to-[#8625FF] rounded-full flex items-center justify-center shadow-md border-2 border-white">
               <Share2 className="w-5 h-5 text-white" />
             </div>
           </div>
@@ -88,7 +88,7 @@ export const GameCreatedScreen: React.FC = () => {
         <div className="space-y-3">
           <button
             onClick={handleShare}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-base shadow-lg shadow-indigo-500/25 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-base shadow-lg shadow-purple-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Share2 className="w-5 h-5" />
             <span>Share Link</span>

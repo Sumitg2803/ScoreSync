@@ -244,8 +244,8 @@ export const HostDashboardScreen: React.FC = () => {
                 />
                 <defs>
                   <linearGradient id="accentArc" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#38BDF8" />
-                    <stop offset="50%" stopColor="#818CF8" />
+                    <stop offset="0%" stopColor="#8625FF" />
+                    <stop offset="50%" stopColor="#7016E6" />
                     <stop offset="100%" stopColor="#10B981" />
                   </linearGradient>
                 </defs>
@@ -266,7 +266,7 @@ export const HostDashboardScreen: React.FC = () => {
             {rankings.map((item, index) => (
               <div
                 key={item.player.id}
-                className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-800/80 border border-slate-700/60 shadow-md backdrop-blur-sm"
+                className="flex items-center justify-between p-3.5 rounded-2xl bg-[#170E33]/85 border border-[#2B1B54]/70 shadow-md backdrop-blur-sm"
               >
                 <div className="flex items-center gap-3">
                   {index === 0 ? (
@@ -301,7 +301,7 @@ export const HostDashboardScreen: React.FC = () => {
           <div className="grid grid-cols-2 gap-2.5">
             <button
               onClick={handleOpenAddSheet}
-              className="py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#6366F1] via-[#7C3AED] to-[#4F46E5] text-white font-bold text-sm shadow-lg shadow-indigo-500/30 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-indigo-500/50"
+              className="py-3.5 px-4 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-sm shadow-lg shadow-purple-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:shadow-purple-600/50"
             >
               <Plus className="w-4 h-4 stroke-[2.5]" />
               <span>Add Round</span>

@@ -50,7 +50,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
           {/* Header */}
           <div className="p-5 pb-3 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-purple-50/60 via-indigo-50/60 to-amber-50/60">
             <div className="flex items-center gap-2.5">
-              <div className="w-10 h-10 rounded-2xl bg-indigo-600 text-white flex items-center justify-center shadow-md shadow-indigo-500/25">
+              <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#4A10A8] to-[#8625FF] text-white flex items-center justify-center shadow-md shadow-purple-500/25">
                 <BookOpen className="w-5 h-5 stroke-[2.2]" />
               </div>
               <div>
@@ -84,7 +84,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 onClick={() => setActiveTab('host')}
                 className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'host'
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-gradient-to-r from-[#4A10A8] to-[#7016E6] text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -95,7 +95,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 onClick={() => setActiveTab('player')}
                 className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'player'
-                    ? 'bg-indigo-600 text-white shadow-xs'
+                    ? 'bg-gradient-to-r from-[#4A10A8] to-[#7016E6] text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -106,7 +106,7 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                 onClick={() => setActiveTab('viewer')}
                 className={`flex-1 py-1.5 px-1.5 text-[10px] sm:text-[11px] font-black rounded-xl transition flex items-center justify-center gap-1 cursor-pointer ${
                   activeTab === 'viewer'
-                    ? 'bg-purple-600 text-white shadow-xs'
+                    ? 'bg-gradient-to-r from-[#7016E6] to-[#8625FF] text-white shadow-xs'
                     : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
@@ -215,6 +215,10 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
                     <li className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
                       <span><strong>Live Sync:</strong> Every phone in the room jumps and celebrates together!</span>
+                    </li>
+                    <li className="flex items-center gap-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                      <span><strong>Native PWA Experience:</strong> Tap "Install App" to add ScoreSync to your phone's home screen with zero browser bars!</span>
                     </li>
                   </ul>
                 </div>
