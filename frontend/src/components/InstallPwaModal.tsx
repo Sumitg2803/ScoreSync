@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Download, Share, PlusSquare, Check, X, Smartphone } from 'lucide-react';
+import { Download, Share, PlusSquare, X, MoreVertical, Smartphone, CheckCircle2 } from 'lucide-react';
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -8,55 +8,70 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export const usePwaInstall = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(
+    (window as any).deferredPwaPrompt || null
+  );
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIos, setIsIos] = useState(false);
+  const [isAndroid, setIsAndroid] = useState(false);
 
   useEffect(() => {
-    // Detect if already installed (standalone mode)
+    // Detect standalone mode
     const isStandalone =
       window.matchMedia('(display-mode: standalone)').matches ||
       (window.navigator as any).standalone === true;
     setIsInstalled(isStandalone);
 
-    // Detect iOS
-    const userAgent = window.navigator.userAgent.toLowerCase();
-    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
-    setIsIos(isIosDevice);
+    const ua = window.navigator.userAgent.toLowerCase();
+    setIsIos(/iphone|ipad|ipod/.test(ua));
+    setIsAndroid(/android/.test(ua));
 
-    const handleBeforeInstallPrompt = (e: Event) => {
+    const handlePrompt = (e: Event) => {
       e.preventDefault();
-      setDeferredPrompt(e as BeforeInstallPromptEvent);
+      const pEvent = e as BeforeInstallPromptEvent;
+      (window as any).deferredPwaPrompt = pEvent;
+      setDeferredPrompt(pEvent);
+    };
+
+    const handlePromptAvailable = () => {
+      if ((window as any).deferredPwaPrompt) {
+        setDeferredPrompt((window as any).deferredPwaPrompt);
+      }
     };
 
     const handleAppInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
+      (window as any).deferredPwaPrompt = null;
     };
 
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('beforeinstallprompt', handlePrompt);
+    window.addEventListener('pwa-prompt-available', handlePromptAvailable);
     window.addEventListener('appinstalled', handleAppInstalled);
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('beforeinstallprompt', handlePrompt);
+      window.removeEventListener('pwa-prompt-available', handlePromptAvailable);
       window.removeEventListener('appinstalled', handleAppInstalled);
     };
   }, []);
 
   const promptInstall = async () => {
-    if (deferredPrompt) {
-      await deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
+    const promptToUse = deferredPrompt || (window as any).deferredPwaPrompt;
+    if (promptToUse) {
+      await promptToUse.prompt();
+      const choice = await promptToUse.userChoice;
       if (choice.outcome === 'accepted') {
         setIsInstalled(true);
       }
       setDeferredPrompt(null);
+      (window as any).deferredPwaPrompt = null;
       return true;
     }
     return false;
   };
 
-  return { deferredPrompt, isInstalled, isIos, promptInstall };
+  return { deferredPrompt, isInstalled, isIos, isAndroid, promptInstall };
 };
 
 interface InstallPwaModalProps {
@@ -64,6 +79,8 @@ interface InstallPwaModalProps {
   onClose: () => void;
   promptInstall: () => Promise<boolean>;
   isIos: boolean;
+  isAndroid: boolean;
+  deferredPrompt: BeforeInstallPromptEvent | null;
 }
 
 export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
@@ -71,16 +88,37 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
   onClose,
   promptInstall,
   isIos,
+  isAndroid,
+  deferredPrompt,
 }) => {
   const [isInstalling, setIsInstalling] = useState(false);
+  const [showManualSteps, setShowManualSteps] = useState(!deferredPrompt && !isIos);
+  const [installedSuccess, setInstalledSuccess] = useState(false);
+
+  useEffect(() => {
+    // If deferredPrompt is available, we can offer the direct 1-tap install
+    if (deferredPrompt) {
+      setShowManualSteps(false);
+    } else if (!isIos) {
+      setShowManualSteps(true);
+    }
+  }, [deferredPrompt, isIos]);
 
   const handleNativeInstall = async () => {
     setIsInstalling(true);
     try {
-      const installed = await promptInstall();
-      if (installed) {
-        onClose();
+      const success = await promptInstall();
+      if (success) {
+        setInstalledSuccess(true);
+        setTimeout(() => {
+          onClose();
+        }, 1400);
+      } else {
+        // Fallback to manual step guide if prompt was rejected or not available
+        setShowManualSteps(true);
       }
+    } catch {
+      setShowManualSteps(true);
     } finally {
       setIsInstalling(false);
     }
@@ -107,7 +145,7 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
             </button>
 
             {/* App Icon Preview */}
-            <div className="flex justify-center mb-4 mt-2">
+            <div className="flex justify-center mb-4 mt-1">
               <div className="relative w-20 h-20 rounded-2xl p-1 bg-gradient-to-br from-[#4A10A8] to-[#8625FF] shadow-lg shadow-purple-500/25">
                 <img
                   src="/pwa-192x192.png"
@@ -118,17 +156,24 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
             </div>
 
             <h3 className="text-xl font-black text-[#1E1B4B] mb-1">
-              Install ScoreSync
+              {installedSuccess ? 'App Installed!' : 'Install ScoreSync'}
             </h3>
-            <p className="text-xs text-slate-500 mb-5 leading-relaxed">
-              Enjoy a fullscreen native app experience with zero address bars and instant loading!
+            <p className="text-xs text-slate-500 mb-4 leading-relaxed">
+              {installedSuccess
+                ? 'ScoreSync is now installed on your home screen!'
+                : 'Enjoy a fullscreen native app experience with zero address bars and instant loading.'}
             </p>
 
-            {isIos ? (
+            {installedSuccess ? (
+              <div className="py-4 flex flex-col items-center justify-center text-emerald-600">
+                <CheckCircle2 className="w-12 h-12 stroke-[2.2] animate-bounce" />
+                <span className="text-xs font-bold mt-2">Ready on your Home Screen!</span>
+              </div>
+            ) : isIos ? (
               /* iOS Safari Instructions */
-              <div className="bg-purple-50/70 border border-purple-100 rounded-2xl p-4 text-left space-y-3 mb-4">
+              <div className="bg-purple-50/80 border border-purple-100 rounded-2xl p-4 text-left space-y-3 mb-4">
                 <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-xl bg-purple-600/10 flex items-center justify-center text-purple-700 shrink-0 font-bold text-xs">
+                  <div className="w-7 h-7 rounded-xl bg-purple-600/15 flex items-center justify-center text-purple-800 shrink-0 font-black text-xs">
                     1
                   </div>
                   <div className="text-xs text-slate-700">
@@ -137,16 +182,25 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
                 </div>
 
                 <div className="flex items-start gap-3">
-                  <div className="w-7 h-7 rounded-xl bg-purple-600/10 flex items-center justify-center text-purple-700 shrink-0 font-bold text-xs">
+                  <div className="w-7 h-7 rounded-xl bg-purple-600/15 flex items-center justify-center text-purple-800 shrink-0 font-black text-xs">
                     2
                   </div>
                   <div className="text-xs text-slate-700">
                     Scroll down and tap <span className="font-bold inline-flex items-center gap-1 text-purple-900">Add to Home Screen <PlusSquare className="w-3.5 h-3.5 inline text-slate-800" /></span>.
                   </div>
                 </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-purple-600/15 flex items-center justify-center text-purple-800 shrink-0 font-black text-xs">
+                    3
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    Tap <span className="font-bold text-purple-900">Add</span> at the top right to place it on your home screen!
+                  </div>
+                </div>
               </div>
-            ) : (
-              /* Android / Desktop One-Tap Button */
+            ) : deferredPrompt && !showManualSteps ? (
+              /* One-Tap Native Android/Desktop Prompt */
               <div className="space-y-3 mb-4">
                 <button
                   onClick={handleNativeInstall}
@@ -154,16 +208,53 @@ export const InstallPwaModal: React.FC<InstallPwaModalProps> = ({
                   className="w-full py-3.5 px-5 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-sm shadow-lg shadow-purple-600/30 active:scale-[0.98] transition cursor-pointer flex items-center justify-center gap-2"
                 >
                   <Download className="w-4 h-4" />
-                  <span>{isInstalling ? 'Installing...' : 'Add to Home Screen'}</span>
+                  <span>{isInstalling ? 'Opening Installer...' : 'Add to Home Screen'}</span>
                 </button>
+
+                <button
+                  onClick={() => setShowManualSteps(true)}
+                  className="text-[11px] font-semibold text-purple-700 hover:text-purple-900"
+                >
+                  Not opening? Show manual steps
+                </button>
+              </div>
+            ) : (
+              /* Android Chrome / Browser Step-by-Step Instructions */
+              <div className="bg-purple-50/80 border border-purple-100 rounded-2xl p-4 text-left space-y-3 mb-4">
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-purple-600/15 flex items-center justify-center text-purple-800 shrink-0 font-black text-xs">
+                    1
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    Tap the <span className="font-bold inline-flex items-center gap-1 text-purple-900">Menu (3 dots <MoreVertical className="w-3.5 h-3.5 inline text-slate-800" />)</span> in the top-right corner of Chrome.
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-purple-600/15 flex items-center justify-center text-purple-800 shrink-0 font-black text-xs">
+                    2
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    Tap <span className="font-bold inline-flex items-center gap-1 text-purple-900">Install app <Smartphone className="w-3.5 h-3.5 inline text-purple-600" /></span> (or <span className="font-bold text-purple-900">Add to Home screen</span>).
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-3">
+                  <div className="w-7 h-7 rounded-xl bg-purple-600/15 flex items-center justify-center text-purple-800 shrink-0 font-black text-xs">
+                    3
+                  </div>
+                  <div className="text-xs text-slate-700">
+                    Tap <span className="font-bold text-purple-900">Install</span> on the popup confirmation. That's it!
+                  </div>
+                </div>
               </div>
             )}
 
             <button
               onClick={onClose}
-              className="text-xs font-bold text-slate-400 hover:text-slate-600 transition"
+              className="text-xs font-bold text-slate-400 hover:text-slate-600 transition cursor-pointer"
             >
-              Maybe Later
+              Close
             </button>
           </motion.div>
         </div>

@@ -1,4 +1,5 @@
 {
+  "id": "/",
   "name": "ScoreSync • Real-Time Game Scoring",
   "short_name": "ScoreSync",
   "description": "Live synchronized party & board game scoring app with instant leaderboards, badges, and host roulette.",

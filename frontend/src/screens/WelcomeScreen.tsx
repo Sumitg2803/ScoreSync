@@ -18,7 +18,7 @@ export const WelcomeScreen: React.FC = () => {
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
-  const { isInstalled, isIos, promptInstall } = usePwaInstall();
+  const { isInstalled, isIos, isAndroid, deferredPrompt, promptInstall } = usePwaInstall();
 
   // Persistent Device Lock: Auto-resume active game immediately
   useEffect(() => {
@@ -178,6 +178,8 @@ export const WelcomeScreen: React.FC = () => {
           onClose={() => setIsInstallModalOpen(false)}
           promptInstall={promptInstall}
           isIos={isIos}
+          isAndroid={isAndroid}
+          deferredPrompt={deferredPrompt}
         />
       </div>
     </MobileContainer>
