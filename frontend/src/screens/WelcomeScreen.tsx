@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { GameControllerAccent } from '../components/Illustrations';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowRight, BookOpen, Eye, Gamepad2, Smartphone, Download } from 'lucide-react';
+import { ArrowRight, BookOpen, Eye, Gamepad2, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { UserGuideModal } from '../components/UserGuideModal';
 import { InstallPwaModal, usePwaInstall } from '../components/InstallPwaModal';
@@ -55,15 +55,11 @@ export const WelcomeScreen: React.FC = () => {
     <MobileContainer>
       <div className="flex-1 flex flex-col justify-between p-6 pt-12 pb-8">
         {/* Top Header Bar */}
-        <div className="flex justify-between items-center text-xs font-semibold px-1">
-          <div className="flex items-center gap-1.5 text-purple-950 font-bold tracking-wide">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-            <span>ScoreSync Live</span>
-          </div>
+        <div className="flex justify-end items-center text-xs font-semibold px-1 min-h-[32px]">
           {!isInstalled && (
             <button
               onClick={() => setIsInstallModalOpen(true)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 font-bold hover:bg-purple-200/80 transition cursor-pointer shadow-2xs"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 font-bold hover:bg-purple-200/80 transition cursor-pointer shadow-xs active:scale-95"
               title="Install App"
             >
               <Download className="w-3.5 h-3.5 text-purple-700" />
@@ -142,26 +138,14 @@ export const WelcomeScreen: React.FC = () => {
             <span>Join as Audience</span>
           </button>
 
-          {/* User Guide & Install Row */}
-          <div className="flex gap-2">
-            <button
-              onClick={() => setIsGuideOpen(true)}
-              className="flex-1 py-2.5 px-3 rounded-xl bg-purple-100/50 text-purple-900 font-bold text-xs border border-purple-200/60 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-100/80"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-purple-700" />
-              <span>User Guide</span>
-            </button>
-
-            {!isInstalled && (
-              <button
-                onClick={() => setIsInstallModalOpen(true)}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-purple-100/70 text-purple-900 font-bold text-xs border border-purple-200/80 active:scale-[0.98] transition-all flex items-center justify-center gap-1.5 cursor-pointer hover:bg-purple-200/70"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-purple-700" />
-                <span>Install App</span>
-              </button>
-            )}
-          </div>
+          {/* User Guide Pill Button */}
+          <button
+            onClick={() => setIsGuideOpen(true)}
+            className="w-full py-2.5 px-4 rounded-xl bg-purple-100/50 text-purple-900 font-bold text-xs border border-purple-200/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:bg-purple-100/80"
+          >
+            <BookOpen className="w-4 h-4 text-purple-700" />
+            <span>How to Play • User Guide</span>
+          </button>
 
           <GameControllerAccent className="absolute -bottom-8 -right-4" />
         </motion.div>
