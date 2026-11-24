@@ -12,6 +12,7 @@ import { HostSettingsModal } from '../components/HostSettingsModal';
 import { ToastContainer } from '../components/ToastContainer';
 import { SoundToggleButton } from '../components/SoundToggleButton';
 import { soundEffects } from '../utils/soundEffects';
+import { FloatingReactionsCanvas, EmojiReactionDock } from '../components/EmojiReactions';
 import { Crown, Plus, BarChart2, CheckCircle2, Edit3, QrCode, LogOut, Eye, Settings, Lock } from 'lucide-react';
 
 export const HostDashboardScreen: React.FC = () => {
@@ -296,8 +297,16 @@ export const HostDashboardScreen: React.FC = () => {
           </div>
         </div>
 
+        {/* Floating Reactions Canvas */}
+        <FloatingReactionsCanvas />
+
         {/* Bottom Actions */}
-        <div className="space-y-2.5 pt-4">
+        <div className="space-y-2.5 pt-3">
+          {/* Reaction Bar for Host */}
+          <div className="flex justify-center">
+            <EmojiReactionDock dark />
+          </div>
+
           <div className="grid grid-cols-2 gap-2.5">
             <button
               onClick={handleOpenAddSheet}

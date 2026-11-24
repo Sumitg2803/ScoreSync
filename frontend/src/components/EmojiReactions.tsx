@@ -68,7 +68,7 @@ export const FloatingReactionsCanvas: React.FC = () => {
 /**
  * Floating Emoji Reaction Dock (bottom-right interactive pill bar)
  */
-export const EmojiReactionDock: React.FC = () => {
+export const EmojiReactionDock: React.FC<{ dark?: boolean }> = ({ dark = false }) => {
   const sendReaction = useGameStore((state) => state.sendReaction);
   const lastTapRef = useRef<number>(0);
 
@@ -95,14 +95,22 @@ export const EmojiReactionDock: React.FC = () => {
   };
 
   return (
-    <div className="flex items-center gap-1.5 p-1.5 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg shadow-indigo-500/10 border border-slate-200/80">
+    <div
+      className={`flex items-center gap-1.5 p-1.5 backdrop-blur-md rounded-2xl shadow-lg border transition-all ${
+        dark
+          ? 'bg-[#190F36]/90 border-[#321E62]/80 shadow-black/40'
+          : 'bg-white/95 border-slate-200/80 shadow-indigo-500/10'
+      }`}
+    >
       {PARTY_EMOJIS.map((emoji) => (
         <motion.button
           key={emoji}
           onClick={() => handleTap(emoji)}
           whileTap={{ scale: 0.75 }}
           whileHover={{ scale: 1.15 }}
-          className="w-8 h-8 rounded-xl flex items-center justify-center text-lg hover:bg-slate-100 active:bg-indigo-50 transition cursor-pointer select-none"
+          className={`w-8 h-8 rounded-xl flex items-center justify-center text-lg transition cursor-pointer select-none ${
+            dark ? 'hover:bg-purple-900/40 active:bg-purple-900/60' : 'hover:bg-slate-100 active:bg-indigo-50'
+          }`}
           title={`React with ${emoji}`}
         >
           {emoji}
