@@ -1,5 +1,7 @@
 import os
 import json
+import hmac
+import hashlib
 import random
 import string
 import secrets
@@ -767,8 +769,56 @@ async def get_public_maintenance_status():
 
 # ----------------- Admin Security & Authentication -----------------
 
-ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY", "scoresync-admin-2026")
+DEFAULT_ADMIN_EMAIL = "sumit.s.gaikwad28@gmail.com"
+DEFAULT_ADMIN_PASSWORD_HASH = "pbkdf2_sha256:600000:cc0d2c6ddce7c305b47ab0e82c59c75e:56456ebc07839a371380e996ce735f5e96a7cd6f6c69141975225afe713a894f"
+SESSION_TTL_HOURS = 24
 failed_login_tracker: Dict[str, Dict[str, any]] = {}
+
+
+def hash_password(password: str) -> str:
+    salt = os.urandom(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 600000)
+    return f"pbkdf2_sha256:600000:{salt.hex()}:{digest.hex()}"
+
+
+def verify_password(password: str, stored_hash: str) -> bool:
+    try:
+        algo, iter_str, salt_hex, hash_hex = stored_hash.split(":")
+        if algo != "pbkdf2_sha256":
+            return False
+        iterations = int(iter_str)
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        candidate = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iterations)
+        return hmac.compare_digest(candidate, expected)
+    except Exception:
+        return False
+
+
+def hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+async def ensure_admin_user():
+    """Seeds the primary admin user (hashed password) in MongoDB if admin_users is empty."""
+    db = get_database()
+    existing_count = await db.admin_users.count_documents({})
+    if existing_count == 0:
+        await db.admin_users.insert_one({
+            "email": DEFAULT_ADMIN_EMAIL.lower(),
+            "password_hash": DEFAULT_ADMIN_PASSWORD_HASH,
+            "role": "superadmin",
+            "created_at": datetime.utcnow().isoformat()
+        })
+
+
+@app.on_event("startup")
+async def startup_seed_admin():
+    try:
+        await ensure_admin_user()
+    except Exception:
+        pass
+
 
 def check_ip_lockout(ip: str):
     record = failed_login_tracker.get(ip)
@@ -797,44 +847,129 @@ def reset_failed_login(ip: str):
     if ip in failed_login_tracker:
         del failed_login_tracker[ip]
 
-async def verify_admin(x_admin_key: Optional[str] = Header(None), request: Request = None):
-    if not x_admin_key or x_admin_key != ADMIN_SECRET_KEY:
+
+def _extract_bearer_token(authorization: Optional[str], x_admin_token: Optional[str]) -> Optional[str]:
+    if authorization and authorization.lower().startswith("bearer "):
+        return authorization[7:].strip()
+    if x_admin_token:
+        return x_admin_token.strip()
+    return None
+
+
+async def verify_admin(
+    authorization: Optional[str] = Header(None),
+    x_admin_token: Optional[str] = Header(None),
+):
+    token = _extract_bearer_token(authorization, x_admin_token)
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or missing Admin Key"
+            detail="Authentication required. Please log in."
         )
-    return True
+
+    db = get_database()
+    token_hash = hash_token(token)
+    session = await db.admin_sessions.find_one({"token_hash": token_hash})
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked session. Please log in again."
+        )
+
+    expires_at_str = session.get("expires_at")
+    try:
+        expires_at = datetime.fromisoformat(expires_at_str)
+    except Exception:
+        expires_at = datetime.min
+
+    if datetime.utcnow() >= expires_at:
+        await db.admin_sessions.delete_one({"_id": session["_id"]})
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired. Please log in again."
+        )
+
+    return session.get("email")
+
 
 @app.post("/api/admin/login")
 async def admin_login(payload: dict, request: Request):
-    """Admin portal login with failed-attempt lockout security"""
+    """Admin portal login using email + hashed password stored in MongoDB"""
     client_ip = request.client.host if request.client else "unknown"
     check_ip_lockout(client_ip)
 
-    admin_key = payload.get("admin_key", "")
-    if admin_key != ADMIN_SECRET_KEY:
+    email = (payload.get("email") or "").strip().lower()
+    password = payload.get("password") or ""
+
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email and password are required")
+
+    await ensure_admin_user()
+    db = get_database()
+    user = await db.admin_users.find_one({"email": email})
+
+    if not user or not verify_password(password, user.get("password_hash", "")):
         record_failed_login(client_ip)
-        # Log failed attempt in audit collection
-        db = get_database()
         await db.admin_audit_logs.insert_one({
             "id": secrets.token_hex(6),
             "action": "failed_login",
-            "details": {"reason": "Incorrect admin key"},
+            "details": {"email": email, "reason": "Invalid email or password"},
             "ip_address": client_ip,
             "timestamp": datetime.utcnow().isoformat()
         })
-        raise HTTPException(status_code=401, detail="Invalid admin key")
+        raise HTTPException(status_code=401, detail="Invalid email or password")
 
     reset_failed_login(client_ip)
-    db = get_database()
+    session_token = secrets.token_urlsafe(32)
+    now = datetime.utcnow()
+    expires_at = now + timedelta(hours=SESSION_TTL_HOURS)
+
+    await db.admin_sessions.insert_one({
+        "token_hash": hash_token(session_token),
+        "email": user["email"],
+        "ip_address": client_ip,
+        "created_at": now.isoformat(),
+        "expires_at": expires_at.isoformat()
+    })
+
     await db.admin_audit_logs.insert_one({
         "id": secrets.token_hex(6),
         "action": "admin_login",
-        "details": {"status": "authenticated"},
+        "details": {"email": user["email"], "status": "authenticated"},
         "ip_address": client_ip,
-        "timestamp": datetime.utcnow().isoformat()
+        "timestamp": now.isoformat()
     })
-    return {"success": True, "token": ADMIN_SECRET_KEY, "message": "Authentication successful"}
+    return {
+        "success": True,
+        "token": session_token,
+        "email": user["email"],
+        "expires_at": expires_at.isoformat(),
+        "message": "Authentication successful"
+    }
+
+
+@app.post("/api/admin/logout")
+async def admin_logout(
+    request: Request,
+    authorization: Optional[str] = Header(None),
+    x_admin_token: Optional[str] = Header(None),
+):
+    """Revokes active admin session token in MongoDB"""
+    token = _extract_bearer_token(authorization, x_admin_token)
+    if token:
+        db = get_database()
+        token_hash = hash_token(token)
+        session = await db.admin_sessions.find_one_and_delete({"token_hash": token_hash})
+        if session:
+            client_ip = request.client.host if request.client else "unknown"
+            await db.admin_audit_logs.insert_one({
+                "id": secrets.token_hex(6),
+                "action": "admin_logout",
+                "details": {"email": session.get("email")},
+                "ip_address": client_ip,
+                "timestamp": datetime.utcnow().isoformat()
+            })
+    return {"success": True, "message": "Logged out"}
 
 # ----------------- Admin Real-Time Database & Storage Metrics -----------------
 
