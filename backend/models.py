@@ -76,6 +76,8 @@ class FeedbackModel(BaseModel):
     category: str = "general"  # "bug", "suggestion", "general"
     message: str
     player_name: Optional[str] = "Anonymous"
+    email: Optional[str] = None
+    phone: Optional[str] = None
     game_id: Optional[str] = None
     status: str = "new"  # "new", "reviewed", "resolved"
     created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -86,6 +88,8 @@ class CreateFeedbackRequest(BaseModel):
     category: str = "general"
     message: str
     player_name: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
     game_id: Optional[str] = None
 
 class UpdateFeedbackStatusRequest(BaseModel):

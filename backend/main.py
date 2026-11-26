@@ -840,14 +840,21 @@ async def reset_current_game(game_id: str, x_host_token: Optional[str] = Header(
 @app.post("/api/feedback")
 async def submit_feedback(req: CreateFeedbackRequest, request: Request):
     """Public endpoint for players and hosts to submit app feedback/bug reports"""
+    category = req.category if req.category in ["bug", "suggestion", "general"] else "general"
+    clean_name = (req.player_name or "").strip()[:40]
+    if category == "bug" and not clean_name:
+        raise HTTPException(status_code=400, detail="Name is required when reporting a problem.")
+
     db = get_database()
     feedback_id = secrets.token_hex(6)
     feedback_doc = {
         "id": feedback_id,
         "rating": max(1, min(5, req.rating)),
-        "category": req.category if req.category in ["bug", "suggestion", "general"] else "general",
+        "category": category,
         "message": req.message.strip(),
-        "player_name": (req.player_name or "Anonymous").strip()[:40],
+        "player_name": clean_name or "Anonymous",
+        "email": (req.email or "").strip()[:100] or None,
+        "phone": (req.phone or "").strip()[:30] or None,
         "game_id": req.game_id.upper() if req.game_id else None,
         "status": "new",
         "created_at": datetime.utcnow().isoformat(),
