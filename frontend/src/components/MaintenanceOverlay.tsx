@@ -40,6 +40,7 @@ export const MaintenanceOverlay: React.FC = () => {
   const maintenance = useGameStore((state) => state.maintenance);
   const setMaintenance = useGameStore((state) => state.setMaintenance);
   const [globalAlert, setGlobalAlert] = useState<{ id: string; message: string; alert_type: string } | null>(null);
+  const [roomAdminMsg, setRoomAdminMsg] = useState<{ id: string; host_name: string; message: string } | null>(null);
   const [nowMs, setNowMs] = useState<number>(Date.now());
   const rawMaintenanceRef = useRef<MaintenanceInfo | null>(null);
 
@@ -163,6 +164,9 @@ export const MaintenanceOverlay: React.FC = () => {
       } else if (e.detail?.type === 'GLOBAL_ANNOUNCEMENT' && e.detail?.data) {
         setGlobalAlert(e.detail.data);
         setTimeout(() => setGlobalAlert(null), 8000);
+      } else if (e.detail?.type === 'ROOM_ADMIN_MESSAGE' && e.detail?.data) {
+        setRoomAdminMsg(e.detail.data);
+        setTimeout(() => setRoomAdminMsg(null), 10000);
       }
     };
 
@@ -260,6 +264,40 @@ export const MaintenanceOverlay: React.FC = () => {
             </motion.div>
           );
         })()}
+      </AnimatePresence>
+
+      {/* 1b. Room-Specific Admin Broadcast Banner */}
+      <AnimatePresence>
+        {roomAdminMsg && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-4 left-4 right-4 z-50 max-w-md mx-auto pointer-events-auto"
+          >
+            <div className="bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white p-4 rounded-2xl shadow-2xl border border-purple-300/40 flex items-start gap-3 backdrop-blur-md">
+              <div className="w-9 h-9 rounded-xl bg-white/20 text-white flex items-center justify-center shrink-0 mt-0.5">
+                <Info className="w-4 h-4 animate-pulse" />
+              </div>
+              <div className="flex-1 min-w-0 text-left">
+                <span className="text-[11px] font-black tracking-wide block text-purple-100">
+                  Message From ADMIN to {roomAdminMsg.host_name}
+                </span>
+                <p className="text-xs font-bold mt-1 leading-relaxed break-words text-white">
+                  {roomAdminMsg.message}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoomAdminMsg(null)}
+                className="opacity-75 hover:opacity-100 transition cursor-pointer p-0.5 shrink-0"
+                aria-label="Dismiss room message"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </motion.div>
+        )}
       </AnimatePresence>
 
       {/* 2. Scheduled Upcoming Banner on non-home pages */}

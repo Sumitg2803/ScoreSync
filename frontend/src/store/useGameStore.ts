@@ -386,7 +386,7 @@ export const useGameStore = create<GameStore>()(
               return;
             }
 
-            if (data.event === 'MAINTENANCE_UPDATE' || data.event === 'GLOBAL_ANNOUNCEMENT') {
+            if (data.event === 'MAINTENANCE_UPDATE' || data.event === 'GLOBAL_ANNOUNCEMENT' || data.event === 'ROOM_ADMIN_MESSAGE') {
               window.dispatchEvent(
                 new CustomEvent('scoresync-broadcast', { detail: { type: data.event, data: data.meta } })
               );

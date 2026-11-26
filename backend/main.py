@@ -1320,6 +1320,46 @@ async def admin_terminate_game(game_id: str, request: Request):
     })
     return {"status": "terminated", "game_id": g_id}
 
+
+@app.post("/api/admin/games/{game_id}/broadcast", dependencies=[Depends(verify_admin)])
+async def admin_broadcast_to_room(game_id: str, req: BroadcastAlertRequest, request: Request):
+    """Broadcasts an admin message ONLY to all members connected inside a specific game room"""
+    db = get_database()
+    g_id = game_id.upper()
+    existing = await db.games.find_one({"id": g_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    clean_msg = (req.message or "").strip()
+    if not clean_msg:
+        raise HTTPException(status_code=400, detail="Broadcast message cannot be empty")
+
+    host_id = existing.get("host_id", "")
+    host_name = "Host"
+    for p in existing.get("players", []):
+        if p.get("id") == host_id:
+            host_name = p.get("name", "Host")
+            break
+
+    payload = {
+        "id": secrets.token_hex(4),
+        "game_id": g_id,
+        "host_name": host_name,
+        "message": clean_msg,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    await manager.broadcast_game_update(g_id, "ROOM_ADMIN_MESSAGE", {}, meta=payload)
+
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "room_broadcast_sent",
+        "details": payload,
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"status": "broadcast_sent", **payload}
+
 # ----------------- Admin Storage Purge ("One-Click Purge") -----------------
 
 @app.post("/api/admin/storage/purge", dependencies=[Depends(verify_admin)])
