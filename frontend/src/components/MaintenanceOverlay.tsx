@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wrench, Bell, Clock, ArrowLeft } from 'lucide-react';
+import { Wrench, Clock, ArrowLeft, AlertTriangle, Info, X } from 'lucide-react';
 import { apiRequest, WS_BASE } from '../services/api';
 import { useGameStore, type MaintenanceInfo } from '../store/useGameStore';
 
@@ -191,26 +191,75 @@ export const MaintenanceOverlay: React.FC = () => {
     <>
       {/* 1. Global Instant Live Announcement Ticker / Toast */}
       <AnimatePresence>
-        {globalAlert && (
-          <motion.div
-            initial={{ opacity: 0, y: -50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -50 }}
-            className="fixed top-4 left-4 right-4 z-50 max-w-md mx-auto pointer-events-auto"
-          >
-            <div className="bg-gradient-to-r from-purple-900 to-indigo-900 text-white p-3.5 px-4 rounded-2xl shadow-2xl border border-purple-500/40 flex items-center gap-3 backdrop-blur-md">
-              <div className="w-8 h-8 rounded-xl bg-purple-500/30 flex items-center justify-center shrink-0">
-                <Bell className="w-4 h-4 text-purple-200 animate-bounce" />
+        {globalAlert && (() => {
+          const alertType = (globalAlert.alert_type || 'info').toLowerCase();
+          const isWarning = alertType === 'warning';
+          const isMaint = alertType === 'maintenance';
+
+          const containerStyle = isMaint
+            ? 'bg-gradient-to-r from-red-700 via-rose-700 to-red-600 text-white border-rose-400/50 shadow-red-900/40'
+            : isWarning
+            ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300 text-slate-950 border-yellow-200 shadow-amber-900/30'
+            : 'bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white border-purple-300/40 shadow-purple-900/40';
+
+          const iconWrapStyle = isMaint
+            ? 'bg-white/20 text-white'
+            : isWarning
+            ? 'bg-slate-950/15 text-slate-950'
+            : 'bg-white/20 text-white';
+
+          const badgeStyle = isMaint
+            ? 'bg-white/20 text-white border-white/30'
+            : isWarning
+            ? 'bg-slate-950/15 text-slate-950 border-slate-950/20'
+            : 'bg-white/20 text-white border-white/30';
+
+          const labelText = isMaint ? 'Maintenance' : isWarning ? 'Warning' : 'Info';
+
+          return (
+            <motion.div
+              initial={{ opacity: 0, y: -50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -50 }}
+              className="fixed top-4 left-4 right-4 z-50 max-w-md mx-auto pointer-events-auto"
+            >
+              <div className={`p-4 rounded-2xl shadow-2xl border flex items-start gap-3 backdrop-blur-md ${containerStyle}`}>
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${iconWrapStyle}`}>
+                  {isMaint ? (
+                    <Wrench className="w-4 h-4 animate-pulse" />
+                  ) : isWarning ? (
+                    <AlertTriangle className="w-4 h-4 animate-bounce" />
+                  ) : (
+                    <Info className="w-4 h-4 animate-pulse" />
+                  )}
+                </div>
+
+                <div className="flex-1 min-w-0 text-left">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[11px] font-black uppercase tracking-wider">
+                      Msg From Admin
+                    </span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wide border ${badgeStyle}`}>
+                      {labelText}
+                    </span>
+                  </div>
+                  <p className="text-xs font-bold mt-1 leading-relaxed break-words">
+                    {globalAlert.message}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setGlobalAlert(null)}
+                  className="opacity-70 hover:opacity-100 transition cursor-pointer p-0.5 shrink-0"
+                  aria-label="Dismiss announcement"
+                >
+                  <X className="w-4 h-4" />
+                </button>
               </div>
-              <div className="flex-1 min-w-0 text-left">
-                <span className="text-[10px] font-black uppercase tracking-wider text-purple-300 block">
-                  Announcement
-                </span>
-                <p className="text-xs font-bold text-white truncate">{globalAlert.message}</p>
-              </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          );
+        })()}
       </AnimatePresence>
 
       {/* 2. Scheduled Upcoming Banner on non-home pages */}
