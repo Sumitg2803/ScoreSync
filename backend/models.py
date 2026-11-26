@@ -68,3 +68,47 @@ class AddRoundRequest(BaseModel):
 class EditRoundRequest(BaseModel):
     scores: Dict[str, float]
     note: Optional[str] = None
+
+# Admin & Feedback Models
+class FeedbackModel(BaseModel):
+    id: str
+    rating: int = 5
+    category: str = "general"  # "bug", "suggestion", "general"
+    message: str
+    player_name: Optional[str] = "Anonymous"
+    game_id: Optional[str] = None
+    status: str = "new"  # "new", "reviewed", "resolved"
+    created_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    user_agent: Optional[str] = None
+
+class CreateFeedbackRequest(BaseModel):
+    rating: int = 5
+    category: str = "general"
+    message: str
+    player_name: Optional[str] = None
+    game_id: Optional[str] = None
+
+class UpdateFeedbackStatusRequest(BaseModel):
+    status: str  # "new", "reviewed", "resolved"
+
+class MaintenanceConfigModel(BaseModel):
+    is_active: bool = False
+    message: str = "ScoreSync is currently undergoing scheduled maintenance. Please check back shortly!"
+    scheduled_start: Optional[str] = None
+    scheduled_end: Optional[str] = None
+    updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+
+class UpdateMaintenanceRequest(BaseModel):
+    is_active: bool = False
+    message: Optional[str] = None
+    scheduled_start: Optional[str] = None
+    scheduled_end: Optional[str] = None
+
+class PurgeStorageRequest(BaseModel):
+    purge_type: str  # "stale_games" (0 rounds, >24h) or "completed_older_than_days"
+    days: Optional[int] = 30
+
+class BroadcastAlertRequest(BaseModel):
+    message: str
+    alert_type: Optional[str] = "info"  # "info", "warning", "maintenance"
+

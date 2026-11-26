@@ -374,6 +374,13 @@ export const useGameStore = create<GameStore>()(
               return;
             }
 
+            if (data.event === 'MAINTENANCE_UPDATE' || data.event === 'GLOBAL_ANNOUNCEMENT') {
+              window.dispatchEvent(
+                new CustomEvent('scoresync-broadcast', { detail: { type: data.event, data: data.meta } })
+              );
+              return;
+            }
+
             // Live floating emoji reaction from viewer or player
             if (data.event === 'EMOJI_REACTION' && data.meta?.emoji) {
               soundEffects.playReactionPop();

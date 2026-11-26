@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { FeedbackModal } from './FeedbackModal';
 import {
   BookOpen,
   X,
@@ -23,6 +24,7 @@ import {
   Eye,
   Settings,
   Lock,
+  MessageSquare,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -34,6 +36,7 @@ interface UserGuideModalProps {
 export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose }) => {
   // Default tab is "why" as requested
   const [activeTab, setActiveTab] = useState<'why' | 'host' | 'player' | 'viewer'>('why');
+  const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
 
   if (!isOpen) return null;
 
@@ -492,15 +495,31 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
             )}
           </div>
 
-          {/* Bottom Close Action */}
-          <div className="p-3 bg-slate-50 border-t border-slate-100">
+          {/* Bottom Actions */}
+          <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
+            <button
+              onClick={() => {
+                onClose();
+                setIsFeedbackOpen(true);
+              }}
+              className="w-full py-2 px-3 rounded-xl bg-purple-100/70 text-purple-900 font-bold text-[11px] border border-purple-200/80 active:scale-[0.98] transition cursor-pointer hover:bg-purple-200/70 flex items-center justify-center gap-1.5"
+            >
+              <MessageSquare className="w-3.5 h-3.5 text-purple-700" />
+              <span>Have Feedback or Found a Bug? Let us know!</span>
+            </button>
+
             <button
               onClick={onClose}
-              className="w-full py-3 rounded-2xl bg-indigo-600 text-white font-bold text-xs shadow-md shadow-indigo-500/25 active:scale-[0.98] transition cursor-pointer"
+              className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-xs shadow-md shadow-purple-600/30 active:scale-[0.98] transition cursor-pointer"
             >
               Got it, let's play! 🚀
             </button>
           </div>
+
+          <FeedbackModal
+            isOpen={isFeedbackOpen}
+            onClose={() => setIsFeedbackOpen(false)}
+          />
         </motion.div>
       </div>
     </AnimatePresence>

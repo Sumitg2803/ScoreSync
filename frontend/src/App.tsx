@@ -9,10 +9,12 @@ import { LeaderboardScreen } from './screens/LeaderboardScreen';
 import { ResultsScreen } from './screens/ResultsScreen';
 
 import { HostRouletteOverlay } from './components/HostRouletteOverlay';
+import { MaintenanceOverlay } from './components/MaintenanceOverlay';
 
 export function App() {
   return (
     <BrowserRouter>
+      <MaintenanceOverlay />
       <HostRouletteOverlay />
       <Routes>
         <Route path="/" element={<WelcomeScreen />} />

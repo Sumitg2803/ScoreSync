@@ -7,7 +7,8 @@ from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from pathlib import Path
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Header
+import time
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException, Depends, Header, Request, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -15,7 +16,10 @@ from fastapi.responses import FileResponse
 from .models import (
     GameModel, PlayerModel, RoundModel, AuditEditModel,
     CreateGameRequest, JoinGameRequest, AddRoundRequest, EditRoundRequest,
-    JoinSpectatorRequest, UpdateAccessSettingsRequest
+    JoinSpectatorRequest, UpdateAccessSettingsRequest,
+    FeedbackModel, CreateFeedbackRequest, UpdateFeedbackStatusRequest,
+    MaintenanceConfigModel, UpdateMaintenanceRequest,
+    PurgeStorageRequest, BroadcastAlertRequest
 )
 from .database import get_database
 from .scoring import calculate_leaderboard
@@ -85,6 +89,11 @@ class ConnectionManager:
 
         # Broadcast concurrently to all connected clients in parallel without blocking
         await asyncio.gather(*[send_to_client(conn) for conn in connections], return_exceptions=True)
+
+    async def broadcast_global_alert(self, event_type: str, data: dict):
+        room_ids = list(self.active_rooms.keys())
+        for r_id in room_ids:
+            await self.broadcast_game_update(r_id, event_type, {}, meta=data)
 
 manager = ConnectionManager()
 
@@ -705,6 +714,514 @@ async def reset_current_game(game_id: str, x_host_token: Optional[str] = Header(
     # Broadcast to all players that the game has ended and connection closed
     await manager.broadcast_game_update(game_id.upper(), "GAME_TERMINATED", {"id": game_id.upper()})
     return {"status": "deleted", "game_id": game_id.upper()}
+
+# ----------------- Feedback & Public Maintenance APIs -----------------
+
+@app.post("/api/feedback")
+async def submit_feedback(req: CreateFeedbackRequest, request: Request):
+    """Public endpoint for players and hosts to submit app feedback/bug reports"""
+    db = get_database()
+    feedback_id = secrets.token_hex(6)
+    feedback_doc = {
+        "id": feedback_id,
+        "rating": max(1, min(5, req.rating)),
+        "category": req.category if req.category in ["bug", "suggestion", "general"] else "general",
+        "message": req.message.strip(),
+        "player_name": (req.player_name or "Anonymous").strip()[:40],
+        "game_id": req.game_id.upper() if req.game_id else None,
+        "status": "new",
+        "created_at": datetime.utcnow().isoformat(),
+        "user_agent": request.headers.get("user-agent", "")[:120]
+    }
+    await db.feedbacks.insert_one(feedback_doc)
+    return {"status": "success", "id": feedback_id, "message": "Thank you for your feedback!"}
+
+@app.get("/api/maintenance/status")
+async def get_public_maintenance_status():
+    """Returns current maintenance state for main app lockdown & countdown banners"""
+    db = get_database()
+    cfg = await db.system_config.find_one({"key": "maintenance"})
+    if not cfg:
+        return {
+            "is_active": False,
+            "message": "ScoreSync is currently undergoing scheduled maintenance. Please check back shortly!",
+            "scheduled_start": None,
+            "scheduled_end": None
+        }
+
+    now = datetime.utcnow().isoformat()
+    is_active = cfg.get("is_active", False)
+    start = cfg.get("scheduled_start")
+    end = cfg.get("scheduled_end")
+
+    # If scheduled window is set, auto-activate if within timeframe
+    if start and end and start <= now <= end:
+        is_active = True
+
+    return {
+        "is_active": is_active,
+        "message": cfg.get("message", "ScoreSync is undergoing scheduled maintenance."),
+        "scheduled_start": start,
+        "scheduled_end": end
+    }
+
+# ----------------- Admin Security & Authentication -----------------
+
+ADMIN_SECRET_KEY = os.getenv("ADMIN_SECRET_KEY", "scoresync-admin-2026")
+failed_login_tracker: Dict[str, Dict[str, any]] = {}
+
+def check_ip_lockout(ip: str):
+    record = failed_login_tracker.get(ip)
+    if record:
+        locked_until = record.get("locked_until")
+        if locked_until and datetime.utcnow() < locked_until:
+            wait_seconds = int((locked_until - datetime.utcnow()).total_seconds())
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many failed login attempts. Locked out for {wait_seconds} more seconds."
+            )
+
+def record_failed_login(ip: str):
+    now = datetime.utcnow()
+    record = failed_login_tracker.get(ip, {"count": 0, "first_failed": now, "locked_until": None})
+    # Reset if last failed attempt was over 15 minutes ago
+    if (now - record["first_failed"]).total_seconds() > 900:
+        record = {"count": 0, "first_failed": now, "locked_until": None}
+
+    record["count"] += 1
+    if record["count"] >= 5:
+        record["locked_until"] = now + timedelta(minutes=15)
+    failed_login_tracker[ip] = record
+
+def reset_failed_login(ip: str):
+    if ip in failed_login_tracker:
+        del failed_login_tracker[ip]
+
+async def verify_admin(x_admin_key: Optional[str] = Header(None), request: Request = None):
+    if not x_admin_key or x_admin_key != ADMIN_SECRET_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing Admin Key"
+        )
+    return True
+
+@app.post("/api/admin/login")
+async def admin_login(payload: dict, request: Request):
+    """Admin portal login with failed-attempt lockout security"""
+    client_ip = request.client.host if request.client else "unknown"
+    check_ip_lockout(client_ip)
+
+    admin_key = payload.get("admin_key", "")
+    if admin_key != ADMIN_SECRET_KEY:
+        record_failed_login(client_ip)
+        # Log failed attempt in audit collection
+        db = get_database()
+        await db.admin_audit_logs.insert_one({
+            "id": secrets.token_hex(6),
+            "action": "failed_login",
+            "details": {"reason": "Incorrect admin key"},
+            "ip_address": client_ip,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        raise HTTPException(status_code=401, detail="Invalid admin key")
+
+    reset_failed_login(client_ip)
+    db = get_database()
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "admin_login",
+        "details": {"status": "authenticated"},
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"success": True, "token": ADMIN_SECRET_KEY, "message": "Authentication successful"}
+
+# ----------------- Admin Real-Time Database & Storage Metrics -----------------
+
+@app.get("/api/admin/system/metrics", dependencies=[Depends(verify_admin)])
+async def get_system_metrics():
+    """Returns actual real storage stats from MongoDB Atlas engine and live server devices"""
+    db = get_database()
+    
+    # 1. Real latency measurement via direct ping roundtrip to MongoDB cluster
+    t0 = time.time()
+    await db.command("ping")
+    db_latency_ms = round((time.time() - t0) * 1000, 1)
+
+    # 2. Real database storage statistics directly from MongoDB dbstats
+    try:
+        db_stats = await db.command("dbstats")
+        data_size = db_stats.get("dataSize", 0)
+        storage_size = db_stats.get("storageSize", 0)
+        index_size = db_stats.get("indexSize", 0)
+        objects_count = db_stats.get("objects", 0)
+        collections_count = db_stats.get("collections", 0)
+    except Exception:
+        data_size = 0
+        storage_size = 0
+        index_size = 0
+        objects_count = 0
+        collections_count = 0
+
+    max_free_tier_bytes = 512 * 1024 * 1024  # 512 MB MongoDB Atlas Free Quota
+    storage_percent = round((storage_size / max_free_tier_bytes) * 100, 2) if max_free_tier_bytes else 0
+
+    # 3. Real connected devices across all rooms (Hosts + Players + Audience)
+    total_connected_devices = sum(len(conns) for conns in manager.active_rooms.values())
+    active_rooms_count = len(manager.active_rooms)
+
+    # 4. Total games and feedbacks in DB
+    total_games_count = await db.games.count_documents({})
+    active_db_games = await db.games.count_documents({"status": {"$in": ["waiting", "in_progress"]}})
+    total_feedbacks_count = await db.feedbacks.count_documents({})
+    new_feedbacks_count = await db.feedbacks.count_documents({"status": "new"})
+
+    return {
+        "db_latency_ms": db_latency_ms,
+        "storage": {
+            "data_size_bytes": data_size,
+            "storage_size_bytes": storage_size,
+            "index_size_bytes": index_size,
+            "total_used_bytes": storage_size + index_size,
+            "max_quota_bytes": max_free_tier_bytes,
+            "usage_percent": storage_percent,
+            "objects_count": objects_count,
+            "collections_count": collections_count
+        },
+        "live": {
+            "connected_devices": total_connected_devices,
+            "active_rooms_with_connections": active_rooms_count,
+            "active_db_games": active_db_games,
+            "total_games_all_time": total_games_count
+        },
+        "feedback": {
+            "total_count": total_feedbacks_count,
+            "new_count": new_feedbacks_count
+        },
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+# ----------------- Admin Analytics (1h, 1w, 1m, 1y, All) -----------------
+
+@app.get("/api/admin/analytics", dependencies=[Depends(verify_admin)])
+async def get_analytics(time_window: str = Query("1w", regex="^(1h|24h|1w|1m|1y|all)$")):
+    """Computes real historical data analysis for played games over specified time range"""
+    db = get_database()
+    now = datetime.utcnow()
+
+    if time_window == "1h":
+        start_time = now - timedelta(hours=1)
+    elif time_window == "24h":
+        start_time = now - timedelta(days=1)
+    elif time_window == "1w":
+        start_time = now - timedelta(days=7)
+    elif time_window == "1m":
+        start_time = now - timedelta(days=30)
+    elif time_window == "1y":
+        start_time = now - timedelta(days=365)
+    else:
+        start_time = datetime(2020, 1, 1)
+
+    start_iso = start_time.isoformat()
+    cursor = db.games.find({"created_at": {"$gte": start_iso}})
+    games_list = await cursor.to_list(length=1000)
+
+    total_games = len(games_list)
+    completed_games = sum(1 for g in games_list if g.get("status") == "completed")
+    in_progress_games = sum(1 for g in games_list if g.get("status") == "in_progress")
+    waiting_games = sum(1 for g in games_list if g.get("status") == "waiting")
+
+    total_players = sum(len(g.get("players", [])) for g in games_list)
+    total_rounds = sum(len(g.get("rounds", [])) for g in games_list)
+    total_spectators = sum(len(g.get("spectators", [])) for g in games_list)
+
+    rule_counts = {"highest_wins": 0, "lowest_wins": 0}
+    for g in games_list:
+        rule = g.get("scoring_rule", "highest_wins")
+        if rule in rule_counts:
+            rule_counts[rule] += 1
+
+    # Generate timeline buckets for charts
+    timeline = []
+    bucket_map: Dict[str, dict] = {}
+
+    for g in games_list:
+        c_at = g.get("created_at", "")
+        if not c_at:
+            continue
+        try:
+            dt = datetime.fromisoformat(c_at)
+            if time_window in ["1h", "24h"]:
+                key = dt.strftime("%H:00")
+            elif time_window in ["1w", "1m"]:
+                key = dt.strftime("%b %d")
+            else:
+                key = dt.strftime("%Y-%m")
+        except Exception:
+            continue
+
+        if key not in bucket_map:
+            bucket_map[key] = {"label": key, "games": 0, "players": 0, "rounds": 0}
+        bucket_map[key]["games"] += 1
+        bucket_map[key]["players"] += len(g.get("players", []))
+        bucket_map[key]["rounds"] += len(g.get("rounds", []))
+
+    timeline = list(bucket_map.values())
+
+    return {
+        "time_window": time_window,
+        "summary": {
+            "total_games": total_games,
+            "completed_games": completed_games,
+            "in_progress_games": in_progress_games,
+            "waiting_games": waiting_games,
+            "total_players": total_players,
+            "total_rounds": total_rounds,
+            "total_spectators": total_spectators,
+            "avg_players_per_game": round(total_players / total_games, 1) if total_games else 0,
+            "avg_rounds_per_game": round(total_rounds / total_games, 1) if total_games else 0
+        },
+        "rules": rule_counts,
+        "timeline": timeline
+    }
+
+# ----------------- Admin Active Games & Force-Close -----------------
+
+@app.get("/api/admin/games/active", dependencies=[Depends(verify_admin)])
+async def get_active_games():
+    """Lists all active and in-progress games with real-time socket connections count"""
+    db = get_database()
+    cursor = db.games.find({"status": {"$in": ["waiting", "in_progress"]}}).sort("created_at", -1)
+    games = await cursor.to_list(length=100)
+
+    results = []
+    for g in games:
+        g_id = g.get("id", "")
+        # Find host player name
+        host_id = g.get("host_id", "")
+        players = g.get("players", [])
+        host_name = "Host"
+        for p in players:
+            if p.get("id") == host_id:
+                host_name = p.get("name", "Host")
+                break
+
+        results.append({
+            "id": g_id,
+            "name": g.get("name", "ScoreSync Game"),
+            "host_id": host_id,
+            "host_name": host_name,
+            "scoring_rule": g.get("scoring_rule", "highest_wins"),
+            "status": g.get("status", "waiting"),
+            "players_count": len(players),
+            "rounds_count": len(g.get("rounds", [])),
+            "spectators_count": len(g.get("spectators", [])),
+            "connected_sockets": len(manager.active_rooms.get(g_id, [])),
+            "admission_locked": g.get("admission_locked", False),
+            "created_at": g.get("created_at"),
+            "last_activity_at": g.get("last_activity_at")
+        })
+    return results
+
+@app.delete("/api/admin/games/{game_id}", dependencies=[Depends(verify_admin)])
+async def admin_terminate_game(game_id: str, request: Request):
+    """Force-terminate an active game room and disconnect connected clients"""
+    db = get_database()
+    g_id = game_id.upper()
+    existing = await db.games.find_one({"id": g_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Game not found")
+
+    await db.games.delete_one({"id": g_id})
+    await manager.broadcast_game_update(g_id, "GAME_TERMINATED", {"id": g_id})
+
+    # Log admin action
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "game_force_closed",
+        "details": {"game_id": g_id, "name": existing.get("name")},
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"status": "terminated", "game_id": g_id}
+
+# ----------------- Admin Storage Purge ("One-Click Purge") -----------------
+
+@app.post("/api/admin/storage/purge", dependencies=[Depends(verify_admin)])
+async def purge_storage(req: PurgeStorageRequest, request: Request):
+    """Purges stale unplayed games or old completed matches to keep MongoDB free tier lean"""
+    db = get_database()
+    now = datetime.utcnow()
+    deleted_count = 0
+
+    if req.purge_type == "stale_games":
+        # Delete games waiting with 0 rounds older than 24h
+        cutoff = (now - timedelta(hours=24)).isoformat()
+        res = await db.games.delete_many({
+            "status": "waiting",
+            "rounds": {"$size": 0},
+            "created_at": {"$lt": cutoff}
+        })
+        deleted_count = res.deleted_count
+    elif req.purge_type == "completed_older_than_days":
+        days = max(1, req.days or 30)
+        cutoff = (now - timedelta(days=days)).isoformat()
+        res = await db.games.delete_many({
+            "status": "completed",
+            "created_at": {"$lt": cutoff}
+        })
+        deleted_count = res.deleted_count
+    else:
+        raise HTTPException(status_code=400, detail="Invalid purge_type. Use 'stale_games' or 'completed_older_than_days'")
+
+    # Log action
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "storage_purged",
+        "details": {"purge_type": req.purge_type, "deleted_count": deleted_count, "days": req.days},
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+
+    return {
+        "status": "success",
+        "deleted_count": deleted_count,
+        "purge_type": req.purge_type,
+        "message": f"Successfully deleted {deleted_count} games from database."
+    }
+
+# ----------------- Admin Feedback Inbox -----------------
+
+@app.get("/api/admin/feedbacks", dependencies=[Depends(verify_admin)])
+async def get_feedbacks(
+    category: Optional[str] = None,
+    status_filter: Optional[str] = Query(None, alias="status")
+):
+    db = get_database()
+    query = {}
+    if category and category in ["bug", "suggestion", "general"]:
+        query["category"] = category
+    if status_filter and status_filter in ["new", "reviewed", "resolved"]:
+        query["status"] = status_filter
+
+    cursor = db.feedbacks.find(query).sort("created_at", -1)
+    feedbacks = await cursor.to_list(length=300)
+    for f in feedbacks:
+        if "_id" in f:
+            del f["_id"]
+    return feedbacks
+
+@app.patch("/api/admin/feedbacks/{feedback_id}", dependencies=[Depends(verify_admin)])
+async def update_feedback_status(feedback_id: str, req: UpdateFeedbackStatusRequest):
+    db = get_database()
+    if req.status not in ["new", "reviewed", "resolved"]:
+        raise HTTPException(status_code=400, detail="Invalid status")
+    res = await db.feedbacks.update_one({"id": feedback_id}, {"$set": {"status": req.status}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    return {"status": "updated", "id": feedback_id, "new_status": req.status}
+
+@app.delete("/api/admin/feedbacks/{feedback_id}", dependencies=[Depends(verify_admin)])
+async def delete_feedback(feedback_id: str):
+    db = get_database()
+    res = await db.feedbacks.delete_one({"id": feedback_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    return {"status": "deleted", "id": feedback_id}
+
+# ----------------- Admin Maintenance & Live Broadcast -----------------
+
+@app.get("/api/admin/maintenance", dependencies=[Depends(verify_admin)])
+async def get_admin_maintenance():
+    db = get_database()
+    cfg = await db.system_config.find_one({"key": "maintenance"})
+    if not cfg:
+        return {
+            "is_active": False,
+            "message": "ScoreSync is currently undergoing scheduled maintenance.",
+            "scheduled_start": None,
+            "scheduled_end": None
+        }
+    return {
+        "is_active": cfg.get("is_active", False),
+        "message": cfg.get("message", "ScoreSync is undergoing maintenance."),
+        "scheduled_start": cfg.get("scheduled_start"),
+        "scheduled_end": cfg.get("scheduled_end")
+    }
+
+@app.post("/api/admin/maintenance", dependencies=[Depends(verify_admin)])
+async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request):
+    """Sets scheduled maintenance or immediate lockdown, and broadcasts to all screens"""
+    db = get_database()
+    doc = {
+        "key": "maintenance",
+        "is_active": req.is_active,
+        "message": req.message or "ScoreSync is currently undergoing scheduled maintenance.",
+        "scheduled_start": req.scheduled_start,
+        "scheduled_end": req.scheduled_end,
+        "updated_at": datetime.utcnow().isoformat()
+    }
+    await db.system_config.update_one({"key": "maintenance"}, {"$set": doc}, upsert=True)
+
+    # Broadcast maintenance update event to all active game rooms instantly
+    await manager.broadcast_global_alert("MAINTENANCE_UPDATE", {
+        "is_active": req.is_active,
+        "message": doc["message"],
+        "scheduled_start": doc["scheduled_start"],
+        "scheduled_end": doc["scheduled_end"]
+    })
+
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "maintenance_updated",
+        "details": doc,
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"status": "success", "maintenance": doc}
+
+@app.post("/api/admin/broadcast", dependencies=[Depends(verify_admin)])
+async def broadcast_live_alert(req: BroadcastAlertRequest, request: Request):
+    """Dispatches a global live alert ticker across all active games immediately"""
+    alert_payload = {
+        "id": secrets.token_hex(4),
+        "message": req.message,
+        "alert_type": req.alert_type or "info",
+        "timestamp": datetime.utcnow().isoformat()
+    }
+    await manager.broadcast_global_alert("GLOBAL_ANNOUNCEMENT", alert_payload)
+
+    client_ip = request.client.host if request.client else "unknown"
+    db = get_database()
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "global_broadcast_sent",
+        "details": alert_payload,
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"status": "broadcast_sent", "payload": alert_payload}
+
+# ----------------- Admin Security & Audit Trail -----------------
+
+@app.get("/api/admin/security/audit", dependencies=[Depends(verify_admin)])
+async def get_security_audit():
+    """Retrieves recent admin security action logs and failed login attempt history"""
+    db = get_database()
+    cursor = db.admin_audit_logs.find().sort("timestamp", -1).limit(60)
+    logs = await cursor.to_list(length=60)
+    for l in logs:
+        if "_id" in l:
+            del l["_id"]
+
+    return {
+        "audit_logs": logs,
+        "active_lockouts_count": sum(1 for v in failed_login_tracker.values() if v.get("locked_until") and v["locked_until"] > datetime.utcnow()),
+        "tracked_failed_ips": len(failed_login_tracker)
+    }
 
 # ----------------- WebSocket Live Connection -----------------
 
