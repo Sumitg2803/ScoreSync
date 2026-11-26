@@ -1,9 +1,38 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Wrench, Bell, Clock, ArrowLeft } from 'lucide-react';
 import { apiRequest, WS_BASE } from '../services/api';
-import { useGameStore } from '../store/useGameStore';
+import { useGameStore, type MaintenanceInfo } from '../store/useGameStore';
+
+export const computeEffectiveMaintenance = (
+  raw: MaintenanceInfo | null,
+  nowMs: number = Date.now()
+): {
+  isActive: boolean;
+  isUpcoming: boolean;
+  startMs: number | null;
+  endMs: number | null;
+} => {
+  if (!raw) {
+    return { isActive: false, isUpcoming: false, startMs: null, endMs: null };
+  }
+  const startMs = raw.scheduled_start ? new Date(raw.scheduled_start).getTime() : null;
+  const endMs = raw.scheduled_end ? new Date(raw.scheduled_end).getTime() : null;
+
+  const validStart = startMs !== null && !Number.isNaN(startMs) ? startMs : null;
+  const validEnd = endMs !== null && !Number.isNaN(endMs) ? endMs : null;
+
+  let inWindow = false;
+  if (validStart !== null && validEnd !== null && validEnd > validStart) {
+    inWindow = nowMs >= validStart && nowMs <= validEnd;
+  }
+
+  const isActive = Boolean(raw.is_active) || inWindow;
+  const isUpcoming = !isActive && validStart !== null && (validEnd === null || validEnd > validStart) && validStart > nowMs;
+
+  return { isActive, isUpcoming, startMs: validStart, endMs: validEnd };
+};
 
 export const MaintenanceOverlay: React.FC = () => {
   const location = useLocation();
@@ -11,12 +40,23 @@ export const MaintenanceOverlay: React.FC = () => {
   const maintenance = useGameStore((state) => state.maintenance);
   const setMaintenance = useGameStore((state) => state.setMaintenance);
   const [globalAlert, setGlobalAlert] = useState<{ id: string; message: string; alert_type: string } | null>(null);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+  const rawMaintenanceRef = useRef<MaintenanceInfo | null>(null);
 
-  // Poll maintenance status on mount & periodic fallback
+  const applyServerMaintenance = (raw: MaintenanceInfo) => {
+    rawMaintenanceRef.current = raw;
+    const { isActive } = computeEffectiveMaintenance(raw, Date.now());
+    setMaintenance({
+      ...raw,
+      is_active: isActive,
+    });
+  };
+
+  // Poll maintenance status on mount, window focus, & periodic fallback
   const checkStatus = async () => {
     try {
       const res = await apiRequest('/api/maintenance/status');
-      setMaintenance(res);
+      applyServerMaintenance(res);
     } catch {
       // non-fatal
     }
@@ -32,6 +72,26 @@ export const MaintenanceOverlay: React.FC = () => {
       window.removeEventListener('focus', onFocus);
     };
   }, []);
+
+  // 1-second local scheduler check so site auto-locks / unlocks at the exact scheduled second
+  useEffect(() => {
+    if (!rawMaintenanceRef.current?.scheduled_start && !rawMaintenanceRef.current?.scheduled_end) {
+      return;
+    }
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setNowMs(now);
+      const raw = rawMaintenanceRef.current;
+      if (raw) {
+        const { isActive } = computeEffectiveMaintenance(raw, now);
+        const currentStoreActive = Boolean(useGameStore.getState().maintenance?.is_active);
+        if (currentStoreActive !== isActive) {
+          setMaintenance({ ...raw, is_active: isActive });
+        }
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [maintenance?.scheduled_start, maintenance?.scheduled_end, setMaintenance]);
 
   // Connect to global /ws/system WebSocket for instant live maintenance & announcement pushes
   useEffect(() => {
@@ -58,7 +118,7 @@ export const MaintenanceOverlay: React.FC = () => {
           try {
             const msg = JSON.parse(event.data);
             if (msg.event === 'MAINTENANCE_UPDATE' && msg.meta) {
-              setMaintenance(msg.meta);
+              applyServerMaintenance(msg.meta);
             } else if (msg.event === 'GLOBAL_ANNOUNCEMENT' && msg.meta) {
               setGlobalAlert(msg.meta);
               setTimeout(() => setGlobalAlert(null), 8000);
@@ -93,13 +153,13 @@ export const MaintenanceOverlay: React.FC = () => {
       if (reconnectTimer) clearTimeout(reconnectTimer);
       if (ws) ws.close();
     };
-  }, [setMaintenance]);
+  }, []);
 
   // Also listen to room WebSocket broadcasts if inside an active game
   useEffect(() => {
     const handleMaintenanceEvent = (e: any) => {
       if (e.detail?.type === 'MAINTENANCE_UPDATE' && e.detail?.data) {
-        setMaintenance(e.detail.data);
+        applyServerMaintenance(e.detail.data);
       } else if (e.detail?.type === 'GLOBAL_ANNOUNCEMENT' && e.detail?.data) {
         setGlobalAlert(e.detail.data);
         setTimeout(() => setGlobalAlert(null), 8000);
@@ -108,23 +168,21 @@ export const MaintenanceOverlay: React.FC = () => {
 
     window.addEventListener('scoresync-broadcast' as any, handleMaintenanceEvent);
     return () => window.removeEventListener('scoresync-broadcast' as any, handleMaintenanceEvent);
-  }, [setMaintenance]);
+  }, []);
 
-  // Compute if scheduled maintenance is coming up soon (< 30 mins)
-  const isUpcoming = (() => {
-    if (!maintenance?.scheduled_start || maintenance.is_active) return false;
-    const startTime = new Date(maintenance.scheduled_start).getTime();
-    const now = Date.now();
-    const diffMins = (startTime - now) / 60000;
-    return diffMins > 0 && diffMins <= 30;
-  })();
+  const { isActive: effectiveActive, isUpcoming, startMs } = computeEffectiveMaintenance(
+    rawMaintenanceRef.current || maintenance,
+    nowMs
+  );
 
-  const formattedEnd = maintenance?.scheduled_end
-    ? new Date(maintenance.scheduled_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  const formattedStart = startMs
+    ? new Date(startMs).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
     : null;
 
-  // On WelcomeScreen ('/'), the screen itself displays the maintenance notice and disables all 3 buttons in black & white.
-  // On secondary entry routes ('/create', '/join', '/join-audience'), block with fullscreen maintenance notice.
+  const formattedEnd = maintenance?.scheduled_end
+    ? new Date(maintenance.scheduled_end).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
   const isEntryRoute =
     location.pathname.startsWith('/create') ||
     location.pathname.startsWith('/join');
@@ -155,26 +213,28 @@ export const MaintenanceOverlay: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* 2. Scheduled Countdown Banner (When maintenance starts in < 30 mins) */}
-      {isUpcoming && !maintenance?.is_active && (
+      {/* 2. Scheduled Upcoming Banner on non-home pages */}
+      {isUpcoming && !effectiveActive && location.pathname !== '/' && (
         <div className="bg-amber-500 text-slate-950 px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
-          <Clock className="w-3.5 h-3.5 animate-spin" />
-          <span>Notice: Scheduled maintenance begins shortly. Please finish ongoing games!</span>
+          <Clock className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">
+            Scheduled Maintenance: {formattedStart} {formattedEnd ? `→ ${formattedEnd}` : ''}
+          </span>
         </div>
       )}
 
       {/* 2b. Sticky Maintenance Notice on in-game pages when maintenance is active */}
-      {maintenance?.is_active && location.pathname !== '/' && !isEntryRoute && (
+      {effectiveActive && location.pathname !== '/' && !isEntryRoute && (
         <div className="bg-amber-500 text-slate-950 px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
           <Wrench className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">
-            Site Maintenance Active: {maintenance.message || 'New games are temporarily disabled.'}
+            Site Maintenance Active: {maintenance?.message || 'New games are temporarily disabled.'}
           </span>
         </div>
       )}
 
       {/* 3. Fullscreen Lockdown if user directly navigates to /create or /join during maintenance */}
-      {maintenance?.is_active && isEntryRoute && (
+      {effectiveActive && isEntryRoute && (
         <div className="fixed inset-0 z-50 bg-[#0E0620] text-white flex flex-col items-center justify-center p-6 text-center">
           <div className="absolute w-80 h-80 bg-[#7016E6]/20 rounded-full blur-3xl pointer-events-none" />
 
@@ -192,7 +252,7 @@ export const MaintenanceOverlay: React.FC = () => {
             </h1>
 
             <p className="text-xs text-slate-300 leading-relaxed mb-6 font-medium">
-              {maintenance.message || 'ScoreSync is temporarily offline for scheduled system upgrades.'}
+              {maintenance?.message || 'ScoreSync is temporarily offline for scheduled system upgrades.'}
             </p>
 
             {formattedEnd && (

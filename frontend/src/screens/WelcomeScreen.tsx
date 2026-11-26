@@ -7,6 +7,7 @@ import { ArrowRight, BookOpen, Eye, Gamepad2, Download, Wrench, Clock } from 'lu
 import { motion } from 'framer-motion';
 import { UserGuideModal } from '../components/UserGuideModal';
 import { InstallPwaModal, usePwaInstall } from '../components/InstallPwaModal';
+import { computeEffectiveMaintenance } from '../components/MaintenanceOverlay';
 
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -16,7 +17,16 @@ export const WelcomeScreen: React.FC = () => {
   const isSpectator = useGameStore((state) => state.isSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
   const maintenance = useGameStore((state) => state.maintenance);
-  const isMaintenanceActive = Boolean(maintenance?.is_active);
+  const [nowMs, setNowMs] = useState<number>(Date.now());
+
+  useEffect(() => {
+    if (!maintenance?.scheduled_start && !maintenance?.scheduled_end) return;
+    const t = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [maintenance?.scheduled_start, maintenance?.scheduled_end]);
+
+  const { isActive: isMaintenanceActive, isUpcoming: isMaintenanceUpcoming, startMs, endMs } =
+    computeEffectiveMaintenance(maintenance, nowMs);
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
@@ -113,7 +123,32 @@ export const WelcomeScreen: React.FC = () => {
           transition={{ delay: 0.35, duration: 0.4 }}
           className="space-y-3.5 relative"
         >
-          {/* Maintenance Notice Card */}
+          {/* Scheduled Upcoming Maintenance Notice */}
+          {!isMaintenanceActive && isMaintenanceUpcoming && startMs && (
+            <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-950 shadow-xs mb-2">
+              <div className="flex items-start gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-200/80 flex items-center justify-center shrink-0 mt-0.5">
+                  <Clock className="w-4 h-4 text-purple-800" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-[11px] font-black uppercase tracking-wider text-purple-900">
+                    Scheduled Maintenance Notice
+                  </h3>
+                  <p className="text-xs font-semibold text-purple-900/90 mt-0.5 leading-relaxed">
+                    {maintenance?.message || 'ScoreSync has upcoming scheduled maintenance.'}
+                  </p>
+                  <div className="mt-1.5 text-[10px] font-bold text-purple-800 bg-purple-200/50 px-2.5 py-1 rounded-lg inline-block">
+                    {new Date(startMs).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    {endMs
+                      ? ` → ${new Date(endMs).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}`
+                      : ''}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Maintenance Lockdown Notice Card */}
           {isMaintenanceActive && (
             <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-sm mb-2">
               <div className="flex items-start gap-3">
@@ -127,12 +162,14 @@ export const WelcomeScreen: React.FC = () => {
                   <p className="text-xs font-semibold text-amber-900/90 mt-1 leading-relaxed">
                     {maintenance?.message || 'ScoreSync is temporarily locked for maintenance. Please check back shortly.'}
                   </p>
-                  {maintenance?.scheduled_end && (
+                  {endMs && (
                     <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-200/60 px-2.5 py-1 rounded-lg">
                       <Clock className="w-3 h-3" />
                       <span>
                         Expected back:{' '}
-                        {new Date(maintenance.scheduled_end).toLocaleTimeString([], {
+                        {new Date(endMs).toLocaleString([], {
+                          month: 'short',
+                          day: 'numeric',
                           hour: '2-digit',
                           minute: '2-digit',
                         })}

@@ -1403,20 +1403,56 @@ async def get_admin_maintenance():
     if not cfg:
         return {
             "is_active": False,
+            "effective_is_active": False,
+            "schedule_status": "none",
             "message": "ScoreSync is currently undergoing scheduled maintenance.",
             "scheduled_start": None,
             "scheduled_end": None
         }
+
+    start = cfg.get("scheduled_start")
+    end = cfg.get("scheduled_end")
+    start_dt = _parse_utc(start)
+    end_dt = _parse_utc(end)
+    now_dt = datetime.utcnow()
+
+    schedule_status = "none"
+    if start_dt and end_dt:
+        if now_dt < start_dt:
+            schedule_status = "scheduled"
+        elif start_dt <= now_dt <= end_dt:
+            schedule_status = "active"
+        else:
+            schedule_status = "expired"
+    elif start_dt:
+        schedule_status = "scheduled" if now_dt < start_dt else "active"
+
+    effective_active = bool(cfg.get("is_active", False)) or (schedule_status == "active")
+
     return {
-        "is_active": cfg.get("is_active", False),
+        "is_active": bool(cfg.get("is_active", False)),
+        "effective_is_active": effective_active,
+        "schedule_status": schedule_status,
         "message": cfg.get("message", "ScoreSync is undergoing maintenance."),
-        "scheduled_start": cfg.get("scheduled_start"),
-        "scheduled_end": cfg.get("scheduled_end")
+        "scheduled_start": start,
+        "scheduled_end": end
     }
 
 @app.post("/api/admin/maintenance", dependencies=[Depends(verify_admin)])
 async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request):
     """Sets scheduled maintenance or immediate lockdown, and broadcasts to all screens"""
+    start_dt = _parse_utc(req.scheduled_start)
+    end_dt = _parse_utc(req.scheduled_end)
+
+    if req.scheduled_start and not start_dt:
+        raise HTTPException(status_code=400, detail="Invalid scheduled start time format.")
+    if req.scheduled_end and not end_dt:
+        raise HTTPException(status_code=400, detail="Invalid scheduled end time format.")
+    if (start_dt and not end_dt) or (end_dt and not start_dt):
+        raise HTTPException(status_code=400, detail="Both scheduled start time and end time are required.")
+    if start_dt and end_dt and end_dt <= start_dt:
+        raise HTTPException(status_code=400, detail="Scheduled end time must be after scheduled start time.")
+
     db = get_database()
     doc = {
         "key": "maintenance",
@@ -1440,7 +1476,37 @@ async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request)
         "ip_address": client_ip,
         "timestamp": datetime.utcnow().isoformat()
     })
-    return {"status": "success", "maintenance": doc}
+    return {"status": "success", "maintenance": effective_status}
+
+
+@app.delete("/api/admin/maintenance/schedule", dependencies=[Depends(verify_admin)])
+async def delete_admin_maintenance_schedule(request: Request):
+    """Clears scheduled maintenance dates and broadcasts updated state to all screens"""
+    db = get_database()
+    await db.system_config.update_one(
+        {"key": "maintenance"},
+        {
+            "$set": {
+                "scheduled_start": None,
+                "scheduled_end": None,
+                "updated_at": datetime.utcnow().isoformat()
+            }
+        },
+        upsert=True
+    )
+
+    effective_status = await get_public_maintenance_status()
+    await manager.broadcast_global_alert("MAINTENANCE_UPDATE", effective_status)
+
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "maintenance_schedule_deleted",
+        "details": {"scheduled_start": None, "scheduled_end": None},
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"status": "success", "maintenance": effective_status}
 
 @app.post("/api/admin/broadcast", dependencies=[Depends(verify_admin)])
 async def broadcast_live_alert(req: BroadcastAlertRequest, request: Request):
