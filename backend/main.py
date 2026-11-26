@@ -115,13 +115,24 @@ class ConnectionManager:
             })
 
         total_devices = sum(len(ws_list) for ws_list in self.active_rooms.values())
+        active_rooms_conn = len([r for r, conns in self.active_rooms.items() if conns])
         return {
             "event": "ADMIN_LIVE_UPDATE",
             "active_games_count": len(results),
+            "active_rooms_with_connections": active_rooms_conn,
             "total_connected_devices": total_devices,
             "active_games": results,
             "timestamp": datetime.utcnow().isoformat()
         }
+
+    async def close_room(self, game_id: str):
+        conns = self.active_rooms.pop(game_id, [])
+        for ws in conns:
+            try:
+                await ws.close(code=4000)
+            except Exception:
+                pass
+        await self.broadcast_admin_live_snapshot()
 
     async def broadcast_admin_live_snapshot(self):
         if not self.admin_sockets:
@@ -1296,7 +1307,7 @@ async def admin_terminate_game(game_id: str, request: Request):
 
     await db.games.delete_one({"id": g_id})
     await manager.broadcast_game_update(g_id, "GAME_TERMINATED", {"id": g_id})
-    asyncio.create_task(manager.broadcast_admin_live_snapshot())
+    await manager.close_room(g_id)
 
     # Log admin action
     client_ip = request.client.host if request.client else "unknown"
