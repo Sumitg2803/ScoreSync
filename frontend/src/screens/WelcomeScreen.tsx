@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { GameControllerAccent } from '../components/Illustrations';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowRight, BookOpen, Eye, Gamepad2, Download } from 'lucide-react';
+import { ArrowRight, BookOpen, Eye, Gamepad2, Download, Wrench, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { UserGuideModal } from '../components/UserGuideModal';
 import { InstallPwaModal, usePwaInstall } from '../components/InstallPwaModal';
@@ -15,6 +15,8 @@ export const WelcomeScreen: React.FC = () => {
   const isHost = useGameStore((state) => state.isHost);
   const isSpectator = useGameStore((state) => state.isSpectator);
   const connectWebSocket = useGameStore((state) => state.connectWebSocket);
+  const maintenance = useGameStore((state) => state.maintenance);
+  const isMaintenanceActive = Boolean(maintenance?.is_active);
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
@@ -111,30 +113,76 @@ export const WelcomeScreen: React.FC = () => {
           transition={{ delay: 0.35, duration: 0.4 }}
           className="space-y-3.5 relative"
         >
-          {/* Create Game Button (Primary signature violet/purple gradient) */}
+          {/* Maintenance Notice Card */}
+          {isMaintenanceActive && (
+            <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-sm mb-2">
+              <div className="flex items-start gap-3">
+                <div className="w-9 h-9 rounded-xl bg-amber-200/80 flex items-center justify-center shrink-0 mt-0.5">
+                  <Wrench className="w-4 h-4 text-amber-800" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-900">
+                    Site Under Maintenance
+                  </h3>
+                  <p className="text-xs font-semibold text-amber-900/90 mt-1 leading-relaxed">
+                    {maintenance?.message || 'ScoreSync is temporarily locked for maintenance. Please check back shortly.'}
+                  </p>
+                  {maintenance?.scheduled_end && (
+                    <div className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-amber-800 bg-amber-200/60 px-2.5 py-1 rounded-lg">
+                      <Clock className="w-3 h-3" />
+                      <span>
+                        Expected back:{' '}
+                        {new Date(maintenance.scheduled_end).toLocaleTimeString([], {
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Create Game Button (Disabled & Black & White during maintenance) */}
           <button
-            onClick={() => navigate('/create')}
-            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-base shadow-lg shadow-purple-600/30 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:shadow-purple-600/45"
+            disabled={isMaintenanceActive}
+            onClick={() => !isMaintenanceActive && navigate('/create')}
+            className={`w-full py-4 px-6 rounded-2xl font-bold text-base transition-all flex items-center justify-center gap-2 ${
+              isMaintenanceActive
+                ? 'bg-neutral-300 text-neutral-600 border border-neutral-400 grayscale cursor-not-allowed opacity-70 shadow-none'
+                : 'bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white shadow-lg shadow-purple-600/30 active:scale-[0.98] cursor-pointer hover:shadow-purple-600/45'
+            }`}
           >
             <span>Create Game</span>
             <ArrowRight className="w-5 h-5 ml-1 stroke-[2.5]" />
           </button>
 
-          {/* Join Game Button (Secondary white card pill - for Players) */}
+          {/* Join Game Button (Disabled & Black & White during maintenance) */}
           <button
-            onClick={() => navigate('/join?mode=player')}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-[#1E1B4B] font-bold text-base shadow-md shadow-purple-100/70 border border-purple-100/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-purple-50/50"
+            disabled={isMaintenanceActive}
+            onClick={() => !isMaintenanceActive && navigate('/join?mode=player')}
+            className={`w-full py-3.5 px-6 rounded-2xl font-bold text-base border transition-all flex items-center justify-center gap-2.5 ${
+              isMaintenanceActive
+                ? 'bg-neutral-200 text-neutral-500 border-neutral-300 grayscale cursor-not-allowed opacity-70 shadow-none'
+                : 'bg-white text-[#1E1B4B] shadow-md shadow-purple-100/70 border-purple-100/60 active:scale-[0.98] cursor-pointer hover:bg-purple-50/50'
+            }`}
           >
-            <Gamepad2 className="w-5 h-5 text-purple-700 stroke-[2.2]" />
+            <Gamepad2 className={`w-5 h-5 stroke-[2.2] ${isMaintenanceActive ? 'text-neutral-500' : 'text-purple-700'}`} />
             <span>Join Game</span>
           </button>
 
-          {/* Join as Audience Button (Secondary pill - for Spectators) */}
+          {/* Join as Audience Button (Disabled & Black & White during maintenance) */}
           <button
-            onClick={() => navigate('/join?mode=audience')}
-            className="w-full py-3.5 px-6 rounded-2xl bg-white text-purple-950 font-bold text-base shadow-md shadow-purple-100/70 border border-purple-100/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer hover:bg-purple-50/50"
+            disabled={isMaintenanceActive}
+            onClick={() => !isMaintenanceActive && navigate('/join?mode=audience')}
+            className={`w-full py-3.5 px-6 rounded-2xl font-bold text-base border transition-all flex items-center justify-center gap-2.5 ${
+              isMaintenanceActive
+                ? 'bg-neutral-200 text-neutral-500 border-neutral-300 grayscale cursor-not-allowed opacity-70 shadow-none'
+                : 'bg-white text-purple-950 shadow-md shadow-purple-100/70 border-purple-100/60 active:scale-[0.98] cursor-pointer hover:bg-purple-50/50'
+            }`}
           >
-            <Eye className="w-5 h-5 text-[#8625FF] stroke-[2.2]" />
+            <Eye className={`w-5 h-5 stroke-[2.2] ${isMaintenanceActive ? 'text-neutral-500' : 'text-[#8625FF]'}`} />
             <span>Join as Audience</span>
           </button>
 

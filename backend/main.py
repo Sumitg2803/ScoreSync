@@ -42,16 +42,19 @@ def generate_game_id() -> str:
     chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(random.choice(chars) for _ in range(6))
 
-# WebSocket Connection Manager for live game rooms
+# WebSocket Connection Manager for live game rooms, system broadcasts, and admin telemetry
 class ConnectionManager:
     def __init__(self):
         self.active_rooms: Dict[str, List[WebSocket]] = {}
+        self.admin_sockets: List[WebSocket] = []
+        self.system_sockets: List[WebSocket] = []
 
     async def connect(self, game_id: str, websocket: WebSocket):
         await websocket.accept()
         if game_id not in self.active_rooms:
             self.active_rooms[game_id] = []
         self.active_rooms[game_id].append(websocket)
+        asyncio.create_task(self.broadcast_admin_live_snapshot())
 
     def disconnect(self, game_id: str, websocket: WebSocket):
         if game_id in self.active_rooms:
@@ -59,8 +62,90 @@ class ConnectionManager:
                 self.active_rooms[game_id].remove(websocket)
             if not self.active_rooms[game_id]:
                 del self.active_rooms[game_id]
+        try:
+            asyncio.create_task(self.broadcast_admin_live_snapshot())
+        except RuntimeError:
+            pass
+
+    async def connect_admin(self, websocket: WebSocket):
+        await websocket.accept()
+        self.admin_sockets.append(websocket)
+
+    def disconnect_admin(self, websocket: WebSocket):
+        if websocket in self.admin_sockets:
+            self.admin_sockets.remove(websocket)
+
+    async def connect_system(self, websocket: WebSocket):
+        await websocket.accept()
+        self.system_sockets.append(websocket)
+
+    def disconnect_system(self, websocket: WebSocket):
+        if websocket in self.system_sockets:
+            self.system_sockets.remove(websocket)
+
+    async def build_admin_live_snapshot(self) -> dict:
+        db = get_database()
+        cursor = db.games.find({"status": {"$in": ["waiting", "in_progress"]}}).sort("created_at", -1)
+        games = await cursor.to_list(length=100)
+
+        results = []
+        for g in games:
+            g_id = g.get("id", "")
+            host_id = g.get("host_id", "")
+            players = g.get("players", [])
+            host_name = "Host"
+            for p in players:
+                if p.get("id") == host_id:
+                    host_name = p.get("name", "Host")
+                    break
+            results.append({
+                "id": g_id,
+                "name": g.get("name", "ScoreSync Game"),
+                "host_id": host_id,
+                "host_name": host_name,
+                "scoring_rule": g.get("scoring_rule", "highest_wins"),
+                "status": g.get("status", "waiting"),
+                "players_count": len(players),
+                "rounds_count": len(g.get("rounds", [])),
+                "spectators_count": len(g.get("spectators", [])),
+                "connected_sockets": len(self.active_rooms.get(g_id, [])),
+                "admission_locked": g.get("admission_locked", False),
+                "created_at": g.get("created_at"),
+                "last_activity_at": g.get("last_activity_at")
+            })
+
+        total_devices = sum(len(ws_list) for ws_list in self.active_rooms.values())
+        return {
+            "event": "ADMIN_LIVE_UPDATE",
+            "active_games_count": len(results),
+            "total_connected_devices": total_devices,
+            "active_games": results,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+    async def broadcast_admin_live_snapshot(self):
+        if not self.admin_sockets:
+            return
+        try:
+            snapshot = await self.build_admin_live_snapshot()
+            payload = json.dumps(snapshot, default=str)
+        except Exception:
+            return
+
+        async def send_admin(ws: WebSocket):
+            try:
+                await ws.send_text(payload)
+            except Exception:
+                self.disconnect_admin(ws)
+
+        await asyncio.gather(*[send_admin(ws) for ws in list(self.admin_sockets)], return_exceptions=True)
 
     async def broadcast_game_update(self, game_id: str, event_type: str, game_data: dict, meta: Optional[dict] = None):
+        try:
+            asyncio.create_task(self.broadcast_admin_live_snapshot())
+        except RuntimeError:
+            pass
+
         if game_id not in self.active_rooms:
             return
 
@@ -93,9 +178,26 @@ class ConnectionManager:
         await asyncio.gather(*[send_to_client(conn) for conn in connections], return_exceptions=True)
 
     async def broadcast_global_alert(self, event_type: str, data: dict):
+        # 1. Broadcast to all active game rooms
         room_ids = list(self.active_rooms.keys())
         for r_id in room_ids:
             await self.broadcast_game_update(r_id, event_type, {}, meta=data)
+
+        # 2. Broadcast to all global website visitors (/ws/system)
+        if self.system_sockets:
+            payload = json.dumps({
+                "event": event_type,
+                "meta": data,
+                "timestamp": datetime.utcnow().isoformat()
+            }, default=str)
+
+            async def send_sys(ws: WebSocket):
+                try:
+                    await ws.send_text(payload)
+                except Exception:
+                    self.disconnect_system(ws)
+
+            await asyncio.gather(*[send_sys(ws) for ws in list(self.system_sockets)], return_exceptions=True)
 
 manager = ConnectionManager()
 
@@ -156,6 +258,10 @@ async def health_check():
 
 @app.post("/api/games/create")
 async def create_game(req: CreateGameRequest):
+    maint = await get_public_maintenance_status()
+    if maint.get("is_active"):
+        raise HTTPException(status_code=503, detail=maint.get("message") or "ScoreSync is currently under maintenance.")
+
     db = get_database()
     game_id = generate_game_id()
     
@@ -185,6 +291,7 @@ async def create_game(req: CreateGameRequest):
     )
 
     await db.games.insert_one(new_game.dict())
+    asyncio.create_task(manager.broadcast_admin_live_snapshot())
 
     response_data = new_game.dict()
     # Provide leaderboard calculation
@@ -1169,6 +1276,7 @@ async def admin_terminate_game(game_id: str, request: Request):
 
     await db.games.delete_one({"id": g_id})
     await manager.broadcast_game_update(g_id, "GAME_TERMINATED", {"id": g_id})
+    asyncio.create_task(manager.broadcast_admin_live_snapshot())
 
     # Log admin action
     client_ip = request.client.host if request.client else "unknown"
@@ -1359,6 +1467,60 @@ async def get_security_audit():
     }
 
 # ----------------- WebSocket Live Connection -----------------
+
+@app.websocket("/ws/system")
+async def system_websocket_endpoint(websocket: WebSocket):
+    """Global system WebSocket for instant maintenance & announcement pushes on all screens"""
+    await manager.connect_system(websocket)
+    try:
+        status_payload = await get_public_maintenance_status()
+        await websocket.send_text(json.dumps({
+            "event": "MAINTENANCE_UPDATE",
+            "meta": status_payload,
+            "timestamp": datetime.utcnow().isoformat()
+        }, default=str))
+
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, Exception):
+        manager.disconnect_system(websocket)
+
+
+@app.websocket("/ws/admin")
+async def admin_websocket_endpoint(websocket: WebSocket, token: Optional[str] = Query(None)):
+    """Authenticated real-time WebSocket pushing instant active games & connected device counts"""
+    if not token:
+        await websocket.close(code=4001)
+        return
+
+    db = get_database()
+    session = await db.admin_sessions.find_one({"token_hash": hash_token(token.strip())})
+    if not session:
+        await websocket.close(code=4001)
+        return
+
+    try:
+        expires_at = datetime.fromisoformat(session.get("expires_at", ""))
+    except Exception:
+        expires_at = datetime.min
+    if datetime.utcnow() >= expires_at:
+        await websocket.close(code=4001)
+        return
+
+    await manager.connect_admin(websocket)
+    try:
+        snapshot = await manager.build_admin_live_snapshot()
+        await websocket.send_text(json.dumps(snapshot, default=str))
+
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except (WebSocketDisconnect, Exception):
+        manager.disconnect_admin(websocket)
+
 
 @app.websocket("/ws/{game_id}")
 async def game_websocket_endpoint(websocket: WebSocket, game_id: str):

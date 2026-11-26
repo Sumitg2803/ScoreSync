@@ -1,24 +1,21 @@
 import React, { useEffect, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wrench, AlertTriangle, Bell, Clock, RefreshCw } from 'lucide-react';
-import { apiRequest } from '../services/api';
+import { Wrench, Bell, Clock, ArrowLeft } from 'lucide-react';
+import { apiRequest, WS_BASE } from '../services/api';
 import { useGameStore } from '../store/useGameStore';
 
-interface MaintenanceState {
-  is_active: boolean;
-  message: string;
-  scheduled_start?: string | null;
-  scheduled_end?: string | null;
-}
-
 export const MaintenanceOverlay: React.FC = () => {
-  const [maintenance, setMaintenance] = useState<MaintenanceState | null>(null);
+  const location = useLocation();
+  const navigate = useNavigate();
+  const maintenance = useGameStore((state) => state.maintenance);
+  const setMaintenance = useGameStore((state) => state.setMaintenance);
   const [globalAlert, setGlobalAlert] = useState<{ id: string; message: string; alert_type: string } | null>(null);
 
-  // Poll maintenance status on mount & periodic
+  // Poll maintenance status on mount & periodic fallback
   const checkStatus = async () => {
     try {
-      const res = await apiRequest('/maintenance/status');
+      const res = await apiRequest('/api/maintenance/status');
       setMaintenance(res);
     } catch {
       // non-fatal
@@ -27,11 +24,73 @@ export const MaintenanceOverlay: React.FC = () => {
 
   useEffect(() => {
     checkStatus();
-    const interval = setInterval(checkStatus, 60000); // Check every minute
+    const interval = setInterval(checkStatus, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  // Listen to WebSocket maintenance updates & global alerts
+  // Connect to global /ws/system WebSocket for instant live maintenance & announcement pushes
+  useEffect(() => {
+    let ws: WebSocket | null = null;
+    let pingTimer: ReturnType<typeof setInterval> | null = null;
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+    let isUnmounted = false;
+
+    const connectSystemWs = () => {
+      if (isUnmounted) return;
+      try {
+        ws = new WebSocket(`${WS_BASE}/ws/system`);
+
+        ws.onopen = () => {
+          pingTimer = setInterval(() => {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              ws.send('ping');
+            }
+          }, 20000);
+        };
+
+        ws.onmessage = (event) => {
+          if (event.data === 'pong') return;
+          try {
+            const msg = JSON.parse(event.data);
+            if (msg.event === 'MAINTENANCE_UPDATE' && msg.meta) {
+              setMaintenance(msg.meta);
+            } else if (msg.event === 'GLOBAL_ANNOUNCEMENT' && msg.meta) {
+              setGlobalAlert(msg.meta);
+              setTimeout(() => setGlobalAlert(null), 8000);
+            }
+          } catch {
+            // ignore non-JSON
+          }
+        };
+
+        ws.onclose = () => {
+          if (pingTimer) clearInterval(pingTimer);
+          if (!isUnmounted) {
+            reconnectTimer = setTimeout(connectSystemWs, 3000);
+          }
+        };
+
+        ws.onerror = () => {
+          ws?.close();
+        };
+      } catch {
+        if (!isUnmounted) {
+          reconnectTimer = setTimeout(connectSystemWs, 5000);
+        }
+      }
+    };
+
+    connectSystemWs();
+
+    return () => {
+      isUnmounted = true;
+      if (pingTimer) clearInterval(pingTimer);
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (ws) ws.close();
+    };
+  }, [setMaintenance]);
+
+  // Also listen to room WebSocket broadcasts if inside an active game
   useEffect(() => {
     const handleMaintenanceEvent = (e: any) => {
       if (e.detail?.type === 'MAINTENANCE_UPDATE' && e.detail?.data) {
@@ -44,7 +103,7 @@ export const MaintenanceOverlay: React.FC = () => {
 
     window.addEventListener('scoresync-broadcast' as any, handleMaintenanceEvent);
     return () => window.removeEventListener('scoresync-broadcast' as any, handleMaintenanceEvent);
-  }, []);
+  }, [setMaintenance]);
 
   // Compute if scheduled maintenance is coming up soon (< 30 mins)
   const isUpcoming = (() => {
@@ -58,6 +117,12 @@ export const MaintenanceOverlay: React.FC = () => {
   const formattedEnd = maintenance?.scheduled_end
     ? new Date(maintenance.scheduled_end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     : null;
+
+  // On WelcomeScreen ('/'), the screen itself displays the maintenance notice and disables all 3 buttons in black & white.
+  // On secondary entry routes ('/create', '/join', '/join-audience'), block with fullscreen maintenance notice.
+  const isEntryRoute =
+    location.pathname.startsWith('/create') ||
+    location.pathname.startsWith('/join');
 
   return (
     <>
@@ -93,10 +158,9 @@ export const MaintenanceOverlay: React.FC = () => {
         </div>
       )}
 
-      {/* 3. Fullscreen Friendly Maintenance Lockdown Screen */}
-      {maintenance?.is_active && (
+      {/* 3. Fullscreen Lockdown if user directly navigates to /create or /join during maintenance */}
+      {maintenance?.is_active && isEntryRoute && (
         <div className="fixed inset-0 z-50 bg-[#0E0620] text-white flex flex-col items-center justify-center p-6 text-center">
-          {/* Ambient glow */}
           <div className="absolute w-80 h-80 bg-[#7016E6]/20 rounded-full blur-3xl pointer-events-none" />
 
           <motion.div
@@ -119,16 +183,16 @@ export const MaintenanceOverlay: React.FC = () => {
             {formattedEnd && (
               <div className="bg-purple-900/40 border border-purple-500/30 px-4 py-2.5 rounded-2xl mb-6 text-xs text-purple-200 font-semibold flex items-center gap-2">
                 <Clock className="w-4 h-4 text-purple-400" />
-                <span>Expected back online around {formattedEnd}</span>
+                <span>Estimated back online: {formattedEnd}</span>
               </div>
             )}
 
             <button
-              onClick={() => window.location.reload()}
-              className="py-3 px-6 rounded-2xl bg-gradient-to-r from-[#4A10A8] via-[#7016E6] to-[#8625FF] text-white font-bold text-xs shadow-lg shadow-purple-600/30 active:scale-95 transition cursor-pointer flex items-center gap-2"
+              onClick={() => navigate('/', { replace: true })}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-[#4A10A8] to-[#8625FF] text-white font-bold text-xs shadow-lg shadow-purple-600/30 flex items-center gap-2 cursor-pointer active:scale-95 transition"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>Check Again</span>
+              <ArrowLeft className="w-4 h-4" />
+              <span>Back to Home</span>
             </button>
           </motion.div>
         </div>

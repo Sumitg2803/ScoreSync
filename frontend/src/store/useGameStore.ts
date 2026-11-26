@@ -13,6 +13,13 @@ export interface HostRouletteState {
   oldHostName?: string;
 }
 
+export interface MaintenanceInfo {
+  is_active: boolean;
+  message: string;
+  scheduled_start?: string | null;
+  scheduled_end?: string | null;
+}
+
 interface GameStore {
   currentGame: GameState | null;
   currentPlayerId: string | null;
@@ -25,8 +32,10 @@ interface GameStore {
   toasts: { id: string; type: 'player_joined' | 'player_left' | 'info'; message: string }[];
   hostRoulette: HostRouletteState | null;
   latestReaction: { id: string; emoji: string; timestamp: number } | null;
+  maintenance: MaintenanceInfo | null;
 
   // Actions
+  setMaintenance: (maintenance: MaintenanceInfo | null) => void;
   addToast: (type: 'player_joined' | 'player_left' | 'info', message: string) => void;
   removeToast: (id: string) => void;
   setGame: (game: GameState) => void;
@@ -72,6 +81,9 @@ export const useGameStore = create<GameStore>()(
       toasts: [],
       hostRoulette: null,
       latestReaction: null,
+      maintenance: null,
+
+      setMaintenance: (maintenance) => set({ maintenance }),
 
       addToast: (type, message) => {
         // Prevent duplicate toasts within a short window
