@@ -24,8 +24,13 @@ export const MaintenanceOverlay: React.FC = () => {
 
   useEffect(() => {
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
-    return () => clearInterval(interval);
+    const interval = setInterval(checkStatus, 15000);
+    const onFocus = () => checkStatus();
+    window.addEventListener('focus', onFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onFocus);
+    };
   }, []);
 
   // Connect to global /ws/system WebSocket for instant live maintenance & announcement pushes
@@ -155,6 +160,16 @@ export const MaintenanceOverlay: React.FC = () => {
         <div className="bg-amber-500 text-slate-950 px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
           <Clock className="w-3.5 h-3.5 animate-spin" />
           <span>Notice: Scheduled maintenance begins shortly. Please finish ongoing games!</span>
+        </div>
+      )}
+
+      {/* 2b. Sticky Maintenance Notice on in-game pages when maintenance is active */}
+      {maintenance?.is_active && location.pathname !== '/' && !isEntryRoute && (
+        <div className="bg-amber-500 text-slate-950 px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
+          <Wrench className="w-3.5 h-3.5 shrink-0" />
+          <span className="truncate">
+            Site Maintenance Active: {maintenance.message || 'New games are temporarily disabled.'}
+          </span>
         </div>
       )}
 

@@ -845,6 +845,22 @@ async def submit_feedback(req: CreateFeedbackRequest, request: Request):
     await db.feedbacks.insert_one(feedback_doc)
     return {"status": "success", "id": feedback_id, "message": "Thank you for your feedback!"}
 
+def _parse_utc(dt_str: Optional[str]) -> Optional[datetime]:
+    if not dt_str:
+        return None
+    try:
+        from datetime import timezone
+        clean = dt_str.strip()
+        if clean.endswith("Z"):
+            clean = clean[:-1] + "+00:00"
+        dt = datetime.fromisoformat(clean)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
+
 @app.get("/api/maintenance/status")
 async def get_public_maintenance_status():
     """Returns current maintenance state for main app lockdown & countdown banners"""
@@ -858,13 +874,17 @@ async def get_public_maintenance_status():
             "scheduled_end": None
         }
 
-    now = datetime.utcnow().isoformat()
-    is_active = cfg.get("is_active", False)
+    now_dt = datetime.utcnow()
+    is_active = bool(cfg.get("is_active", False))
     start = cfg.get("scheduled_start")
     end = cfg.get("scheduled_end")
 
-    # If scheduled window is set, auto-activate if within timeframe
-    if start and end and start <= now <= end:
+    # Auto-activate when current UTC time is inside [scheduled_start, scheduled_end]
+    start_dt = _parse_utc(start)
+    end_dt = _parse_utc(end)
+    if start_dt and end_dt and start_dt <= now_dt <= end_dt:
+        is_active = True
+    elif start_dt and not end_dt and now_dt >= start_dt:
         is_active = True
 
     return {
@@ -1408,13 +1428,9 @@ async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request)
     }
     await db.system_config.update_one({"key": "maintenance"}, {"$set": doc}, upsert=True)
 
-    # Broadcast maintenance update event to all active game rooms instantly
-    await manager.broadcast_global_alert("MAINTENANCE_UPDATE", {
-        "is_active": req.is_active,
-        "message": doc["message"],
-        "scheduled_start": doc["scheduled_start"],
-        "scheduled_end": doc["scheduled_end"]
-    })
+    effective_status = await get_public_maintenance_status()
+    # Broadcast effective maintenance update event to all active game rooms and global system visitors instantly
+    await manager.broadcast_global_alert("MAINTENANCE_UPDATE", effective_status)
 
     client_ip = request.client.host if request.client else "unknown"
     await db.admin_audit_logs.insert_one({
