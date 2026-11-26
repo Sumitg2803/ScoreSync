@@ -140,61 +140,47 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({
                   </div>
                 </div>
 
-                {/* Category Pills */}
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Type
-                  </label>
-                  <div className="grid grid-cols-3 gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCategory('suggestion');
-                        setError('');
-                      }}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer border ${
-                        category === 'suggestion'
-                          ? 'bg-purple-100 text-purple-900 border-purple-300 shadow-2xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <Lightbulb className="w-3.5 h-3.5 text-purple-600" />
-                      <span>Idea</span>
-                    </button>
+                {/* Category Pills (Only for Feedback mode — Report mode is strictly Problem) */}
+                {!isReportMode && (
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+                      Category
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategory('suggestion');
+                          setError('');
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+                          category === 'suggestion'
+                            ? 'bg-purple-100 text-purple-900 border-purple-300 shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <Lightbulb className="w-3.5 h-3.5 text-purple-600" />
+                        <span>Idea</span>
+                      </button>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCategory('general');
-                        setError('');
-                      }}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer border ${
-                        category === 'general'
-                          ? 'bg-indigo-100 text-indigo-900 border-indigo-300 shadow-2xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-indigo-600" />
-                      <span>General</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setCategory('bug');
-                        setError('');
-                      }}
-                      className={`py-2 px-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition cursor-pointer border ${
-                        category === 'bug'
-                          ? 'bg-rose-100 text-rose-900 border-rose-300 shadow-2xs'
-                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                      }`}
-                    >
-                      <Bug className="w-3.5 h-3.5 text-rose-600" />
-                      <span>Problem</span>
-                    </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setCategory('general');
+                          setError('');
+                        }}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition cursor-pointer border ${
+                          category === 'general'
+                            ? 'bg-indigo-100 text-indigo-900 border-indigo-300 shadow-2xs'
+                            : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                        }`}
+                      >
+                        <MessageCircle className="w-3.5 h-3.5 text-indigo-600" />
+                        <span>General</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Rating Stars (shown for Feedback modes) */}
                 {!isReportMode && (
