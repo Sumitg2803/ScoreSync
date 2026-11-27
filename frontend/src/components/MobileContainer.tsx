@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Mail, MessageSquare, Bug, Sparkles } from 'lucide-react';
 import { FeedbackModal } from './FeedbackModal';
+import { useGameStore } from '../store/useGameStore';
+import { computeEffectiveMaintenance } from './MaintenanceOverlay';
 
 interface MobileContainerProps {
   children: React.ReactNode;
@@ -15,8 +17,12 @@ export const MobileContainer: React.FC<MobileContainerProps> = ({
 }) => {
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [modalMode, setModalMode] = useState<'feedback' | 'report'>('feedback');
+  const maintenance = useGameStore((state) => state.maintenance);
+  const { disableFeedback, masterShutdown } = computeEffectiveMaintenance(maintenance);
+  const isFeedbackLocked = disableFeedback || masterShutdown;
 
   const openModal = (mode: 'feedback' | 'report') => {
+    if (isFeedbackLocked) return;
     setModalMode(mode);
     setIsFeedbackOpen(true);
   };
@@ -63,24 +69,41 @@ export const MobileContainer: React.FC<MobileContainerProps> = ({
               </div>
 
               {/* Action Buttons: Feedback & Report a Problem */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <button
-                  type="button"
-                  onClick={() => openModal('feedback')}
-                  className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#4A10A8] to-[#7016E6] hover:from-[#5B17C9] hover:to-[#8625FF] text-white font-bold text-xs shadow-lg shadow-purple-900/40 flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
-                >
-                  <MessageSquare className="w-3.5 h-3.5" />
-                  <span>Feedback</span>
-                </button>
+              <div className="space-y-2">
+                {isFeedbackLocked && (
+                  <p className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-1.5">
+                    Feedback &amp; Problem Reports are temporarily paused for maintenance.
+                  </p>
+                )}
+                <div className="grid grid-cols-2 gap-2.5">
+                  <button
+                    type="button"
+                    disabled={isFeedbackLocked}
+                    onClick={() => openModal('feedback')}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                      isFeedbackLocked
+                        ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 grayscale opacity-60 cursor-not-allowed'
+                        : 'bg-gradient-to-r from-[#4A10A8] to-[#7016E6] hover:from-[#5B17C9] hover:to-[#8625FF] text-white shadow-lg shadow-purple-900/40 active:scale-[0.98] cursor-pointer'
+                    }`}
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>Feedback</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => openModal('report')}
-                  className="py-2.5 px-3 rounded-xl bg-[#180C35] hover:bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:text-white font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98] cursor-pointer"
-                >
-                  <Bug className="w-3.5 h-3.5" />
-                  <span>Report a Problem</span>
-                </button>
+                  <button
+                    type="button"
+                    disabled={isFeedbackLocked}
+                    onClick={() => openModal('report')}
+                    className={`py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition ${
+                      isFeedbackLocked
+                        ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 grayscale opacity-60 cursor-not-allowed'
+                        : 'bg-[#180C35] hover:bg-rose-950/60 border border-rose-500/40 text-rose-300 hover:text-white active:scale-[0.98] cursor-pointer'
+                    }`}
+                  >
+                    <Bug className="w-3.5 h-3.5" />
+                    <span>Report a Problem</span>
+                  </button>
+                </div>
               </div>
 
               {/* Contact Details */}

@@ -97,6 +97,9 @@ class UpdateFeedbackStatusRequest(BaseModel):
 
 class MaintenanceConfigModel(BaseModel):
     is_active: bool = False
+    disable_games: bool = False
+    disable_feedback: bool = False
+    master_shutdown: bool = False
     message: str = "ScoreSync is currently undergoing scheduled maintenance. Please check back shortly!"
     scheduled_start: Optional[str] = None
     scheduled_end: Optional[str] = None
@@ -104,6 +107,9 @@ class MaintenanceConfigModel(BaseModel):
 
 class UpdateMaintenanceRequest(BaseModel):
     is_active: bool = False
+    disable_games: bool = False
+    disable_feedback: bool = False
+    master_shutdown: bool = False
     message: Optional[str] = None
     scheduled_start: Optional[str] = None
     scheduled_end: Optional[str] = None

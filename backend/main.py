@@ -840,6 +840,13 @@ async def reset_current_game(game_id: str, x_host_token: Optional[str] = Header(
 @app.post("/api/feedback")
 async def submit_feedback(req: CreateFeedbackRequest, request: Request):
     """Public endpoint for players and hosts to submit app feedback/bug reports"""
+    maint = await get_public_maintenance_status()
+    if maint.get("disable_feedback") or maint.get("master_shutdown"):
+        raise HTTPException(
+            status_code=503,
+            detail=maint.get("message") or "Feedback and problem reports are temporarily paused for maintenance."
+        )
+
     category = req.category if req.category in ["bug", "suggestion", "general"] else "general"
     clean_name = (req.player_name or "").strip()[:40]
     if category == "bug" and not clean_name:
@@ -907,26 +914,46 @@ async def get_public_maintenance_status():
     if not cfg:
         return {
             "is_active": False,
+            "disable_games": False,
+            "disable_feedback": False,
+            "master_shutdown": False,
+            "raw_disable_games": False,
+            "raw_disable_feedback": False,
+            "raw_master_shutdown": False,
             "message": "ScoreSync is currently undergoing scheduled maintenance. Please check back shortly!",
             "scheduled_start": None,
             "scheduled_end": None
         }
 
     now_dt = datetime.utcnow()
-    is_active = bool(cfg.get("is_active", False))
+    raw_master = bool(cfg.get("master_shutdown", False))
+    raw_games = bool(cfg.get("disable_games", cfg.get("is_active", False)))
+    raw_feedback = bool(cfg.get("disable_feedback", False))
+
     start = cfg.get("scheduled_start")
     end = cfg.get("scheduled_end")
 
     # Auto-activate when current UTC time is inside [scheduled_start, scheduled_end]
+    schedule_active = False
     start_dt = _parse_utc(start)
     end_dt = _parse_utc(end)
     if start_dt and end_dt and start_dt <= now_dt <= end_dt:
-        is_active = True
+        schedule_active = True
     elif start_dt and not end_dt and now_dt >= start_dt:
-        is_active = True
+        schedule_active = True
+
+    effective_games = raw_games or raw_master or schedule_active
+    effective_feedback = raw_feedback or raw_master
+    effective_active = effective_games or raw_master
 
     return {
-        "is_active": is_active,
+        "is_active": effective_active,
+        "disable_games": effective_games,
+        "disable_feedback": effective_feedback,
+        "master_shutdown": raw_master,
+        "raw_disable_games": raw_games,
+        "raw_disable_feedback": raw_feedback,
+        "raw_master_shutdown": raw_master,
         "message": cfg.get("message", "ScoreSync is undergoing scheduled maintenance."),
         "scheduled_start": start,
         "scheduled_end": end
@@ -1543,22 +1570,9 @@ async def delete_admin_announcement(announcement_id: str, request: Request):
 
 @app.get("/api/admin/maintenance", dependencies=[Depends(verify_admin)])
 async def get_admin_maintenance():
-    db = get_database()
-    cfg = await db.system_config.find_one({"key": "maintenance"})
-    if not cfg:
-        return {
-            "is_active": False,
-            "effective_is_active": False,
-            "schedule_status": "none",
-            "message": "ScoreSync is currently undergoing scheduled maintenance.",
-            "scheduled_start": None,
-            "scheduled_end": None
-        }
-
-    start = cfg.get("scheduled_start")
-    end = cfg.get("scheduled_end")
-    start_dt = _parse_utc(start)
-    end_dt = _parse_utc(end)
+    public_status = await get_public_maintenance_status()
+    start_dt = _parse_utc(public_status.get("scheduled_start"))
+    end_dt = _parse_utc(public_status.get("scheduled_end"))
     now_dt = datetime.utcnow()
 
     schedule_status = "none"
@@ -1572,20 +1586,15 @@ async def get_admin_maintenance():
     elif start_dt:
         schedule_status = "scheduled" if now_dt < start_dt else "active"
 
-    effective_active = bool(cfg.get("is_active", False)) or (schedule_status == "active")
-
     return {
-        "is_active": bool(cfg.get("is_active", False)),
-        "effective_is_active": effective_active,
+        **public_status,
+        "effective_is_active": public_status["is_active"],
         "schedule_status": schedule_status,
-        "message": cfg.get("message", "ScoreSync is undergoing maintenance."),
-        "scheduled_start": start,
-        "scheduled_end": end
     }
 
 @app.post("/api/admin/maintenance", dependencies=[Depends(verify_admin)])
 async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request):
-    """Sets scheduled maintenance or immediate lockdown, and broadcasts to all screens"""
+    """Sets granular shutdown modes (games, feedback, master) or scheduled maintenance"""
     start_dt = _parse_utc(req.scheduled_start)
     end_dt = _parse_utc(req.scheduled_end)
 
@@ -1599,9 +1608,16 @@ async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request)
         raise HTTPException(status_code=400, detail="Scheduled end time must be after scheduled start time.")
 
     db = get_database()
+    is_games = bool(req.disable_games or req.is_active)
+    is_feedback = bool(req.disable_feedback)
+    is_master = bool(req.master_shutdown)
+
     doc = {
         "key": "maintenance",
-        "is_active": req.is_active,
+        "is_active": is_games or is_master,
+        "disable_games": is_games,
+        "disable_feedback": is_feedback,
+        "master_shutdown": is_master,
         "message": req.message or "ScoreSync is currently undergoing scheduled maintenance.",
         "scheduled_start": req.scheduled_start,
         "scheduled_end": req.scheduled_end,

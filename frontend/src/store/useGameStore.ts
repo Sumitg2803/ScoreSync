@@ -15,6 +15,9 @@ export interface HostRouletteState {
 
 export interface MaintenanceInfo {
   is_active: boolean;
+  disable_games?: boolean;
+  disable_feedback?: boolean;
+  master_shutdown?: boolean;
   message: string;
   scheduled_start?: string | null;
   scheduled_end?: string | null;

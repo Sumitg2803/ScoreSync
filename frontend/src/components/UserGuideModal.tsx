@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { FeedbackModal } from './FeedbackModal';
+import { useGameStore } from '../store/useGameStore';
+import { computeEffectiveMaintenance } from './MaintenanceOverlay';
 import {
   BookOpen,
   X,
@@ -37,6 +39,9 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
   // Default tab is "why" as requested
   const [activeTab, setActiveTab] = useState<'why' | 'host' | 'player' | 'viewer'>('why');
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
+  const maintenance = useGameStore((state) => state.maintenance);
+  const { disableFeedback, masterShutdown } = computeEffectiveMaintenance(maintenance);
+  const isFeedbackLocked = disableFeedback || masterShutdown;
 
   if (!isOpen) return null;
 
@@ -498,14 +503,24 @@ export const UserGuideModal: React.FC<UserGuideModalProps> = ({ isOpen, onClose 
           {/* Bottom Actions */}
           <div className="p-3 bg-slate-50 border-t border-slate-100 space-y-2">
             <button
+              disabled={isFeedbackLocked}
               onClick={() => {
+                if (isFeedbackLocked) return;
                 onClose();
                 setIsFeedbackOpen(true);
               }}
-              className="w-full py-2 px-3 rounded-xl bg-purple-100/70 text-purple-900 font-bold text-[11px] border border-purple-200/80 active:scale-[0.98] transition cursor-pointer hover:bg-purple-200/70 flex items-center justify-center gap-1.5"
+              className={`w-full py-2 px-3 rounded-xl font-bold text-[11px] border transition flex items-center justify-center gap-1.5 ${
+                isFeedbackLocked
+                  ? 'bg-neutral-200 text-neutral-500 border-neutral-300 grayscale opacity-60 cursor-not-allowed'
+                  : 'bg-purple-100/70 text-purple-900 border-purple-200/80 active:scale-[0.98] cursor-pointer hover:bg-purple-200/70'
+              }`}
             >
-              <MessageSquare className="w-3.5 h-3.5 text-purple-700" />
-              <span>Have Feedback or Found a Bug? Let us know!</span>
+              <MessageSquare className={`w-3.5 h-3.5 ${isFeedbackLocked ? 'text-neutral-500' : 'text-purple-700'}`} />
+              <span>
+                {isFeedbackLocked
+                  ? 'Feedback Paused for Maintenance'
+                  : 'Have Feedback or Found a Bug? Let us know!'}
+              </span>
             </button>
 
             <button

@@ -10,12 +10,23 @@ export const computeEffectiveMaintenance = (
   nowMs: number = Date.now()
 ): {
   isActive: boolean;
+  disableGames: boolean;
+  disableFeedback: boolean;
+  masterShutdown: boolean;
   isUpcoming: boolean;
   startMs: number | null;
   endMs: number | null;
 } => {
   if (!raw) {
-    return { isActive: false, isUpcoming: false, startMs: null, endMs: null };
+    return {
+      isActive: false,
+      disableGames: false,
+      disableFeedback: false,
+      masterShutdown: false,
+      isUpcoming: false,
+      startMs: null,
+      endMs: null,
+    };
   }
   const startMs = raw.scheduled_start ? new Date(raw.scheduled_start).getTime() : null;
   const endMs = raw.scheduled_end ? new Date(raw.scheduled_end).getTime() : null;
@@ -28,10 +39,21 @@ export const computeEffectiveMaintenance = (
     inWindow = nowMs >= validStart && nowMs <= validEnd;
   }
 
-  const isActive = Boolean(raw.is_active) || inWindow;
-  const isUpcoming = !isActive && validStart !== null && (validEnd === null || validEnd > validStart) && validStart > nowMs;
+  const masterShutdown = Boolean(raw.master_shutdown);
+  const disableGames = Boolean(raw.disable_games ?? raw.is_active) || masterShutdown || inWindow;
+  const disableFeedback = Boolean(raw.disable_feedback) || masterShutdown;
+  const isActive = disableGames || masterShutdown;
+  const isUpcoming = !disableGames && validStart !== null && (validEnd === null || validEnd > validStart) && validStart > nowMs;
 
-  return { isActive, isUpcoming, startMs: validStart, endMs: validEnd };
+  return {
+    isActive,
+    disableGames,
+    disableFeedback,
+    masterShutdown,
+    isUpcoming,
+    startMs: validStart,
+    endMs: validEnd,
+  };
 };
 
 export const MaintenanceOverlay: React.FC = () => {

@@ -27,8 +27,14 @@ export const WelcomeScreen: React.FC = () => {
     return () => clearInterval(t);
   }, [maintenance?.scheduled_start, maintenance?.scheduled_end]);
 
-  const { isActive: isMaintenanceActive, isUpcoming: isMaintenanceUpcoming, startMs, endMs } =
-    computeEffectiveMaintenance(maintenance, nowMs);
+  const {
+    disableGames: isGamesLocked,
+    masterShutdown: isMasterLocked,
+    isUpcoming: isMaintenanceUpcoming,
+    startMs,
+    endMs,
+  } = computeEffectiveMaintenance(maintenance, nowMs);
+  const isMaintenanceActive = isGamesLocked;
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
@@ -124,38 +130,49 @@ export const WelcomeScreen: React.FC = () => {
           <div>
             {!isInstalled && (
               <button
-                onClick={() => setIsInstallModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 font-bold hover:bg-purple-200/80 transition cursor-pointer shadow-xs active:scale-95"
+                disabled={isMasterLocked}
+                onClick={() => !isMasterLocked && setIsInstallModalOpen(true)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition shadow-xs ${
+                  isMasterLocked
+                    ? 'bg-neutral-200 border border-neutral-300 text-neutral-500 grayscale opacity-60 cursor-not-allowed'
+                    : 'bg-purple-100/90 border border-purple-200/80 text-purple-900 hover:bg-purple-200/80 cursor-pointer active:scale-95'
+                }`}
                 title="Add to Home Screen"
               >
-                <Download className="w-3.5 h-3.5 text-purple-700" />
+                <Download className={`w-3.5 h-3.5 ${isMasterLocked ? 'text-neutral-500' : 'text-purple-700'}`} />
                 <span>Add to Home Screen</span>
               </button>
             )}
           </div>
 
           <button
+            disabled={isMasterLocked}
             onClick={() => {
+              if (isMasterLocked) return;
               setIsAnnouncementsOpen(true);
               fetchAnnouncements();
             }}
-            className="relative p-2 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 hover:bg-purple-200/80 transition cursor-pointer shadow-xs active:scale-95"
+            className={`relative p-2 rounded-xl transition shadow-xs ${
+              isMasterLocked
+                ? 'bg-neutral-200 border border-neutral-300 text-neutral-500 grayscale opacity-60 cursor-not-allowed'
+                : 'bg-purple-100/90 border border-purple-200/80 text-purple-900 hover:bg-purple-200/80 cursor-pointer active:scale-95'
+            }`}
             title="Announcements"
             aria-label="Announcements"
           >
             <motion.div
               animate={
-                isBellRinging
+                isBellRinging && !isMasterLocked
                   ? { rotate: [0, -20, 20, -16, 16, -10, 10, 0] }
                   : { rotate: 0 }
               }
               transition={{ duration: 0.9, ease: 'easeInOut' }}
               style={{ originY: 0.15 }}
             >
-              <Bell className="w-4 h-4 text-purple-700 stroke-[2.3]" />
+              <Bell className={`w-4 h-4 stroke-[2.3] ${isMasterLocked ? 'text-neutral-500' : 'text-purple-700'}`} />
             </motion.div>
 
-            {announcements.length > 0 && (
+            {announcements.length > 0 && !isMasterLocked && (
               <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
                 {announcements.length}
               </span>
@@ -318,10 +335,15 @@ export const WelcomeScreen: React.FC = () => {
 
           {/* User Guide Pill Button */}
           <button
-            onClick={() => setIsGuideOpen(true)}
-            className="w-full py-2.5 px-4 rounded-xl bg-purple-100/50 text-purple-900 font-bold text-xs border border-purple-200/60 active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer hover:bg-purple-100/80"
+            disabled={isMasterLocked}
+            onClick={() => !isMasterLocked && setIsGuideOpen(true)}
+            className={`w-full py-2.5 px-4 rounded-xl font-bold text-xs border transition-all flex items-center justify-center gap-2 ${
+              isMasterLocked
+                ? 'bg-neutral-200 text-neutral-500 border-neutral-300 grayscale opacity-60 cursor-not-allowed'
+                : 'bg-purple-100/50 text-purple-900 border-purple-200/60 active:scale-[0.98] cursor-pointer hover:bg-purple-100/80'
+            }`}
           >
-            <BookOpen className="w-4 h-4 text-purple-700" />
+            <BookOpen className={`w-4 h-4 ${isMasterLocked ? 'text-neutral-500' : 'text-purple-700'}`} />
             <span>How to Play • User Guide</span>
           </button>
 
