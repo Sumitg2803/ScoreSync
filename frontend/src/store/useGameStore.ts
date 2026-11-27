@@ -357,7 +357,13 @@ export const useGameStore = create<GameStore>()(
           socket.close();
         }
 
-        const wsUrl = `${WS_BASE}/ws/${gameId}`;
+        const params = new URLSearchParams();
+        const devToken = localStorage.getItem('scoresync_device_token');
+        const hToken = get().hostToken || localStorage.getItem('scoresync_host_token');
+        if (devToken) params.set('device_token', devToken);
+        if (hToken) params.set('host_token', hToken);
+        const qs = params.toString();
+        const wsUrl = `${WS_BASE}/ws/${gameId}${qs ? `?${qs}` : ''}`;
         const ws = new WebSocket(wsUrl);
 
         ws.onopen = () => {

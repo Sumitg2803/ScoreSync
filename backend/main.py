@@ -111,6 +111,8 @@ class ConnectionManager:
                 "spectators_count": len(g.get("spectators", [])),
                 "connected_sockets": len(self.active_rooms.get(g_id, [])),
                 "admission_locked": g.get("admission_locked", False),
+                "allow_players": g.get("allow_players", True),
+                "allow_viewers": g.get("allow_viewers", True),
                 "created_at": g.get("created_at"),
                 "last_activity_at": g.get("last_activity_at")
             })
@@ -310,14 +312,36 @@ async def create_game(req: CreateGameRequest):
     response_data["leaderboard"] = calculate_leaderboard(new_game)
     return response_data
 
+def _is_authorized_room_member(game: GameModel, host_token: Optional[str], device_token: Optional[str]) -> bool:
+    if host_token and hmac.compare_digest(host_token, game.host_token):
+        return True
+    if device_token:
+        if any(p.device_token and p.device_token == device_token for p in game.players):
+            return True
+        if game.allow_viewers and device_token in game.spectators:
+            return True
+    return False
+
+
 @app.get("/api/games/{game_id}")
-async def get_game(game_id: str):
+async def get_game(
+    game_id: str,
+    x_host_token: Optional[str] = Header(None),
+    x_device_token: Optional[str] = Header(None),
+):
     db = get_database()
     game_dict = await db.games.find_one({"id": game_id.upper()})
     if not game_dict:
         raise HTTPException(status_code=404, detail="Game not found")
     
     game = GameModel(**game_dict)
+
+    # Strict privacy: if host disabled audience/viewers, block unauthorized reads (e.g. via DevTools/API)
+    if not game.allow_viewers and not _is_authorized_room_member(game, x_host_token, x_device_token):
+        raise HTTPException(
+            status_code=403,
+            detail="Room is private. Host has restricted access."
+        )
     
     # Check 1-hour host-inactivity rule if completed
     if game.status == "completed" and game.completed_at:
@@ -342,23 +366,18 @@ async def join_game(game_id: str, req: JoinGameRequest):
 
     game = GameModel(**game_dict)
 
-    # 1. Check if this device is ALREADY in this game (Persistent Device Lock Reconnect)
+    # 1. Check if this exact device is ALREADY in this game (Persistent Device Lock Reconnect)
     device_token = req.device_token or f"dev_{secrets.token_hex(12)}"
     existing_device_player = next((p for p in game.players if p.device_token and p.device_token == device_token), None)
     
-    # 2. Check by player name if device_token is new
-    existing_name_player = next((p for p in game.players if p.name.strip().lower() == req.player_name.strip().lower()), None)
-
-    existing_player = existing_device_player or existing_name_player
     current_round = len(game.rounds) + 1
     
-    if existing_player:
-        player_id = existing_player.id
-        existing_player.connected = True
-        existing_player.device_token = device_token
-        player_name = existing_player.name
+    if existing_device_player:
+        player_id = existing_device_player.id
+        existing_device_player.connected = True
+        player_name = existing_device_player.name
     else:
-        # Check host admission permission for players
+        # Strictly enforce host admission permission BEFORE any name matching (prevents DevTools/name-hijack bypass)
         if not game.allow_players:
             if not game.allow_viewers:
                 raise HTTPException(
@@ -368,6 +387,17 @@ async def join_game(game_id: str, req: JoinGameRequest):
             raise HTTPException(
                 status_code=403,
                 detail="Host has closed entry for new players."
+            )
+
+        # Prevent impersonating an already-joined player's name from a different device
+        existing_name_player = next(
+            (p for p in game.players if p.name.strip().lower() == req.player_name.strip().lower()),
+            None
+        )
+        if existing_name_player:
+            raise HTTPException(
+                status_code=409,
+                detail="This player name is already taken in this room. Please choose another name."
             )
 
         # If admission is locked because Host is typing scores right now
@@ -1418,6 +1448,8 @@ async def get_active_games():
             "spectators_count": len(g.get("spectators", [])),
             "connected_sockets": len(manager.active_rooms.get(g_id, [])),
             "admission_locked": g.get("admission_locked", False),
+            "allow_players": g.get("allow_players", True),
+            "allow_viewers": g.get("allow_viewers", True),
             "created_at": g.get("created_at"),
             "last_activity_at": g.get("last_activity_at")
         })
@@ -1837,11 +1869,23 @@ async def admin_websocket_endpoint(websocket: WebSocket, token: Optional[str] = 
 
 
 @app.websocket("/ws/{game_id}")
-async def game_websocket_endpoint(websocket: WebSocket, game_id: str):
+async def game_websocket_endpoint(
+    websocket: WebSocket,
+    game_id: str,
+    device_token: Optional[str] = Query(None),
+    host_token: Optional[str] = Query(None),
+):
+    db = get_database()
+    game_dict = await db.games.find_one({"id": game_id.upper()})
+    if game_dict:
+        game = GameModel(**game_dict)
+        if not game.allow_viewers and not _is_authorized_room_member(game, host_token, device_token):
+            await websocket.close(code=4003)
+            return
+
     await manager.connect(game_id.upper(), websocket)
     try:
         # Push immediate state hydration to newly connected or reconnected client
-        db = get_database()
         game_dict = await db.games.find_one({"id": game_id.upper()})
         if game_dict:
             game = GameModel(**game_dict)

@@ -27,6 +27,11 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     headers['X-Host-Token'] = hostToken;
   }
 
+  const deviceToken = localStorage.getItem('scoresync_device_token');
+  if (deviceToken) {
+    headers['X-Device-Token'] = deviceToken;
+  }
+
   const res = await fetch(url, { ...options, headers });
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({ detail: 'API request failed' }));
