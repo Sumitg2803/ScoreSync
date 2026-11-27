@@ -21,7 +21,8 @@ from .models import (
     JoinSpectatorRequest, UpdateAccessSettingsRequest,
     FeedbackModel, CreateFeedbackRequest, UpdateFeedbackStatusRequest,
     MaintenanceConfigModel, UpdateMaintenanceRequest,
-    PurgeStorageRequest, BroadcastAlertRequest, CreateAnnouncementRequest
+    PurgeStorageRequest, BroadcastAlertRequest, CreateAnnouncementRequest,
+    ChangePasswordRequest
 )
 from .database import get_database
 from .scoring import calculate_leaderboard
@@ -1167,6 +1168,73 @@ async def admin_logout(
                 "timestamp": datetime.utcnow().isoformat()
             })
     return {"success": True, "message": "Logged out"}
+
+
+def validate_password_strength(password: str) -> Optional[str]:
+    if len(password) < 8:
+        return "Password must be at least 8 characters long."
+    if not any(c.isupper() for c in password) or not any(c.islower() for c in password):
+        return "Password must contain both uppercase and lowercase letters."
+    if sum(1 for c in password if c.isdigit()) < 2:
+        return "Password must contain at least 2 numbers."
+    if not any(not c.isalnum() for c in password):
+        return "Password must contain at least 1 special character."
+    return None
+
+
+@app.post("/api/admin/change-password")
+async def admin_change_password(
+    req: ChangePasswordRequest,
+    request: Request,
+    admin_email: str = Depends(verify_admin),
+):
+    """Changes admin password after verifying old password, enforcing complexity, and revoking all sessions"""
+    client_ip = request.client.host if request.client else "unknown"
+    check_ip_lockout(client_ip)
+
+    db = get_database()
+    user = await db.admin_users.find_one({"email": admin_email})
+    if not user or not verify_password(req.old_password, user.get("password_hash", "")):
+        record_failed_login(client_ip)
+        await db.admin_audit_logs.insert_one({
+            "id": secrets.token_hex(6),
+            "action": "failed_password_change",
+            "details": {"email": admin_email, "reason": "Incorrect old password"},
+            "ip_address": client_ip,
+            "timestamp": datetime.utcnow().isoformat()
+        })
+        raise HTTPException(status_code=400, detail="Current (old) password is incorrect.")
+
+    if req.new_password == req.old_password:
+        raise HTTPException(status_code=400, detail="New password must be different from your current password.")
+
+    strength_error = validate_password_strength(req.new_password)
+    if strength_error:
+        raise HTTPException(status_code=400, detail=strength_error)
+
+    reset_failed_login(client_ip)
+    now_iso = datetime.utcnow().isoformat()
+    new_hash = hash_password(req.new_password)
+
+    await db.admin_users.update_one(
+        {"email": admin_email},
+        {"$set": {"password_hash": new_hash, "updated_at": now_iso}}
+    )
+    # Invalidate all active sessions for security
+    await db.admin_sessions.delete_many({"email": admin_email})
+
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "password_changed",
+        "details": {"email": admin_email, "sessions_revoked": True},
+        "ip_address": client_ip,
+        "timestamp": now_iso
+    })
+
+    return {
+        "success": True,
+        "message": "Password updated successfully. Please log in with your new password."
+    }
 
 # ----------------- Admin Real-Time Database & Storage Metrics -----------------
 

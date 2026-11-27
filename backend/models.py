@@ -127,3 +127,7 @@ class BroadcastAlertRequest(BaseModel):
 class CreateAnnouncementRequest(BaseModel):
     message: str
 
+class ChangePasswordRequest(BaseModel):
+    old_password: str
+    new_password: str
+
