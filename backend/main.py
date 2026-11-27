@@ -1334,26 +1334,30 @@ async def get_system_metrics():
 # ----------------- Admin Analytics (1h, 1w, 1m, 1y, All) -----------------
 
 @app.get("/api/admin/analytics", dependencies=[Depends(verify_admin)])
-async def get_analytics(time_window: str = Query("1w", regex="^(1h|24h|1w|1m|1y|all)$")):
+async def get_analytics(
+    time_window: Optional[str] = Query(None, regex="^(1h|24h|1w|1m|1y|all)$"),
+    timeframe: Optional[str] = Query(None, regex="^(1h|24h|1w|1m|1y|all)$"),
+):
     """Computes real historical data analysis for played games over specified time range"""
+    window = time_window or timeframe or "1w"
     db = get_database()
     now = datetime.utcnow()
 
-    if time_window == "1h":
+    if window == "1h":
         start_time = now - timedelta(hours=1)
-    elif time_window == "24h":
+    elif window == "24h":
         start_time = now - timedelta(days=1)
-    elif time_window == "1w":
+    elif window == "1w":
         start_time = now - timedelta(days=7)
-    elif time_window == "1m":
+    elif window == "1m":
         start_time = now - timedelta(days=30)
-    elif time_window == "1y":
+    elif window == "1y":
         start_time = now - timedelta(days=365)
     else:
         start_time = datetime(2020, 1, 1)
 
     start_iso = start_time.isoformat()
-    cursor = db.games.find({"created_at": {"$gte": start_iso}})
+    cursor = db.games.find({"created_at": {"$gte": start_iso}}).sort("created_at", 1)
     games_list = await cursor.to_list(length=1000)
 
     total_games = len(games_list)
@@ -1380,10 +1384,10 @@ async def get_analytics(time_window: str = Query("1w", regex="^(1h|24h|1w|1m|1y|
         if not c_at:
             continue
         try:
-            dt = datetime.fromisoformat(c_at)
-            if time_window in ["1h", "24h"]:
+            dt = datetime.fromisoformat(c_at.replace("Z", "+00:00")).replace(tzinfo=None)
+            if window in ["1h", "24h"]:
                 key = dt.strftime("%H:00")
-            elif time_window in ["1w", "1m"]:
+            elif window in ["1w", "1m"]:
                 key = dt.strftime("%b %d")
             else:
                 key = dt.strftime("%Y-%m")
@@ -1399,7 +1403,7 @@ async def get_analytics(time_window: str = Query("1w", regex="^(1h|24h|1w|1m|1y|
     timeline = list(bucket_map.values())
 
     return {
-        "time_window": time_window,
+        "time_window": window,
         "summary": {
             "total_games": total_games,
             "completed_games": completed_games,
