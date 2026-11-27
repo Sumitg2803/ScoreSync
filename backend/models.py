@@ -116,3 +116,6 @@ class BroadcastAlertRequest(BaseModel):
     message: str
     alert_type: Optional[str] = "info"  # "info", "warning", "maintenance"
 
+class CreateAnnouncementRequest(BaseModel):
+    message: str
+

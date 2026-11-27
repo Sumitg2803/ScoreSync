@@ -123,6 +123,10 @@ export const MaintenanceOverlay: React.FC = () => {
             } else if (msg.event === 'GLOBAL_ANNOUNCEMENT' && msg.meta) {
               setGlobalAlert(msg.meta);
               setTimeout(() => setGlobalAlert(null), 8000);
+            } else if (msg.event === 'ANNOUNCEMENTS_UPDATED') {
+              window.dispatchEvent(
+                new CustomEvent('scoresync-broadcast', { detail: { type: 'ANNOUNCEMENTS_UPDATED', data: msg.meta } })
+              );
             }
           } catch {
             // ignore non-JSON

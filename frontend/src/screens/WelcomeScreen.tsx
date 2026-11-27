@@ -3,11 +3,13 @@ import { useNavigate } from 'react-router-dom';
 import { MobileContainer } from '../components/MobileContainer';
 import { GameControllerAccent } from '../components/Illustrations';
 import { useGameStore } from '../store/useGameStore';
-import { ArrowRight, BookOpen, Eye, Gamepad2, Download, Wrench, Clock } from 'lucide-react';
+import { ArrowRight, BookOpen, Eye, Gamepad2, Download, Wrench, Clock, Bell } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { UserGuideModal } from '../components/UserGuideModal';
 import { InstallPwaModal, usePwaInstall } from '../components/InstallPwaModal';
 import { computeEffectiveMaintenance } from '../components/MaintenanceOverlay';
+import { AnnouncementsModal, type PublicAnnouncement } from '../components/AnnouncementsModal';
+import { apiRequest } from '../services/api';
 
 export const WelcomeScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -30,7 +32,58 @@ export const WelcomeScreen: React.FC = () => {
 
   const [isGuideOpen, setIsGuideOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [isAnnouncementsOpen, setIsAnnouncementsOpen] = useState(false);
+  const [announcements, setAnnouncements] = useState<PublicAnnouncement[]>([]);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(false);
+  const [isBellRinging, setIsBellRinging] = useState(false);
   const { isInstalled, isIos, isAndroid, deferredPrompt, promptInstall } = usePwaInstall();
+
+  const fetchAnnouncements = async () => {
+    try {
+      setIsLoadingAnnouncements(true);
+      const data = await apiRequest('/api/announcements');
+      if (Array.isArray(data)) {
+        setAnnouncements(data);
+      }
+    } catch {
+      // non-fatal
+    } finally {
+      setIsLoadingAnnouncements(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAnnouncements();
+    const onFocus = () => fetchAnnouncements();
+    const onBroadcast = (e: any) => {
+      if (e.detail?.type === 'ANNOUNCEMENTS_UPDATED') {
+        fetchAnnouncements();
+      }
+    };
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('scoresync-broadcast' as any, onBroadcast);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('scoresync-broadcast' as any, onBroadcast);
+    };
+  }, []);
+
+  // Ring bell left & right every 10 seconds to draw user attention
+  useEffect(() => {
+    let ringTimeout: ReturnType<typeof setTimeout> | null = null;
+    const triggerRing = () => {
+      setIsBellRinging(true);
+      ringTimeout = setTimeout(() => setIsBellRinging(false), 1100);
+    };
+
+    const initialTimer = setTimeout(triggerRing, 1500);
+    const interval = setInterval(triggerRing, 10000);
+    return () => {
+      clearTimeout(initialTimer);
+      clearInterval(interval);
+      if (ringTimeout) clearTimeout(ringTimeout);
+    };
+  }, []);
 
   // Persistent Device Lock: Auto-resume active game immediately
   useEffect(() => {
@@ -66,18 +119,48 @@ export const WelcomeScreen: React.FC = () => {
   return (
     <MobileContainer>
       <div className="flex-1 flex flex-col justify-between p-6 pt-12 pb-8">
-        {/* Top Header Bar */}
-        <div className="flex justify-end items-center text-xs font-semibold px-1 min-h-[32px]">
-          {!isInstalled && (
-            <button
-              onClick={() => setIsInstallModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 font-bold hover:bg-purple-200/80 transition cursor-pointer shadow-xs active:scale-95"
-              title="Install App"
+        {/* Top Header Bar: Add to Home Screen (left) + Bell Icon (right) */}
+        <div className="flex justify-between items-center text-xs font-semibold px-1 min-h-[36px]">
+          <div>
+            {!isInstalled && (
+              <button
+                onClick={() => setIsInstallModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 font-bold hover:bg-purple-200/80 transition cursor-pointer shadow-xs active:scale-95"
+                title="Add to Home Screen"
+              >
+                <Download className="w-3.5 h-3.5 text-purple-700" />
+                <span>Add to Home Screen</span>
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={() => {
+              setIsAnnouncementsOpen(true);
+              fetchAnnouncements();
+            }}
+            className="relative p-2 rounded-xl bg-purple-100/90 border border-purple-200/80 text-purple-900 hover:bg-purple-200/80 transition cursor-pointer shadow-xs active:scale-95"
+            title="Announcements"
+            aria-label="Announcements"
+          >
+            <motion.div
+              animate={
+                isBellRinging
+                  ? { rotate: [0, -20, 20, -16, 16, -10, 10, 0] }
+                  : { rotate: 0 }
+              }
+              transition={{ duration: 0.9, ease: 'easeInOut' }}
+              style={{ originY: 0.15 }}
             >
-              <Download className="w-3.5 h-3.5 text-purple-700" />
-              <span>Install App</span>
-            </button>
-          )}
+              <Bell className="w-4 h-4 text-purple-700 stroke-[2.3]" />
+            </motion.div>
+
+            {announcements.length > 0 && (
+              <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center shadow-xs">
+                {announcements.length}
+              </span>
+            )}
+          </button>
         </div>
 
         {/* Center Hero Section with Official Logo */}
@@ -249,6 +332,14 @@ export const WelcomeScreen: React.FC = () => {
         <UserGuideModal
           isOpen={isGuideOpen}
           onClose={() => setIsGuideOpen(false)}
+        />
+
+        {/* Announcements Modal */}
+        <AnnouncementsModal
+          isOpen={isAnnouncementsOpen}
+          onClose={() => setIsAnnouncementsOpen(false)}
+          announcements={announcements}
+          isLoading={isLoadingAnnouncements}
         />
 
         {/* PWA Install Modal */}

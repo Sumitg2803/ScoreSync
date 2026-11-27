@@ -21,7 +21,7 @@ from .models import (
     JoinSpectatorRequest, UpdateAccessSettingsRequest,
     FeedbackModel, CreateFeedbackRequest, UpdateFeedbackStatusRequest,
     MaintenanceConfigModel, UpdateMaintenanceRequest,
-    PurgeStorageRequest, BroadcastAlertRequest
+    PurgeStorageRequest, BroadcastAlertRequest, CreateAnnouncementRequest
 )
 from .database import get_database
 from .scoring import calculate_leaderboard
@@ -863,6 +863,26 @@ async def submit_feedback(req: CreateFeedbackRequest, request: Request):
     await db.feedbacks.insert_one(feedback_doc)
     return {"status": "success", "id": feedback_id, "message": "Thank you for your feedback!"}
 
+
+# ----------------- Persistent 90-Day Announcements APIs -----------------
+
+async def _prune_and_list_announcements():
+    db = get_database()
+    now_iso = datetime.utcnow().isoformat()
+    # Remove any expired announcements (> 90 days old)
+    await db.announcements.delete_many({"expires_at": {"$lte": now_iso}})
+    cursor = db.announcements.find(
+        {"expires_at": {"$gt": now_iso}},
+        {"_id": 0, "expires_at_dt": 0}
+    ).sort("created_at", -1)
+    return await cursor.to_list(length=100)
+
+
+@app.get("/api/announcements")
+async def get_public_announcements():
+    """Returns active announcements (auto-expires after 90 days)"""
+    return await _prune_and_list_announcements()
+
 def _parse_utc(dt_str: Optional[str]) -> Optional[datetime]:
     if not dt_str:
         return None
@@ -961,6 +981,9 @@ async def ensure_admin_user():
 async def startup_seed_admin():
     try:
         await ensure_admin_user()
+        db = get_database()
+        # Automatically expire & delete announcements after 90 days via MongoDB TTL index
+        await db.announcements.create_index("expires_at_dt", expireAfterSeconds=0)
     except Exception:
         pass
 
@@ -1451,6 +1474,70 @@ async def delete_feedback(feedback_id: str):
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Feedback not found")
     return {"status": "deleted", "id": feedback_id}
+
+# ----------------- Admin Persistent Announcements -----------------
+
+@app.get("/api/admin/announcements", dependencies=[Depends(verify_admin)])
+async def get_admin_announcements():
+    return await _prune_and_list_announcements()
+
+
+@app.post("/api/admin/announcements", dependencies=[Depends(verify_admin)])
+async def create_admin_announcement(req: CreateAnnouncementRequest, request: Request):
+    clean_msg = (req.message or "").strip()
+    if not clean_msg:
+        raise HTTPException(status_code=400, detail="Announcement message cannot be empty.")
+
+    now = datetime.utcnow()
+    expires_dt = now + timedelta(days=90)
+    ann_id = secrets.token_hex(6)
+
+    doc = {
+        "id": ann_id,
+        "message": clean_msg,
+        "created_at": now.isoformat() + "Z",
+        "expires_at": expires_dt.isoformat(),
+        "expires_at_dt": expires_dt,
+    }
+    db = get_database()
+    await db.announcements.insert_one(doc)
+    await manager.broadcast_global_alert("ANNOUNCEMENTS_UPDATED", {"action": "created", "id": ann_id})
+
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "announcement_created",
+        "details": {"id": ann_id, "message": clean_msg},
+        "ip_address": client_ip,
+        "timestamp": now.isoformat()
+    })
+    return {
+        "id": ann_id,
+        "message": clean_msg,
+        "created_at": doc["created_at"],
+        "expires_at": doc["expires_at"],
+    }
+
+
+@app.delete("/api/admin/announcements/{announcement_id}", dependencies=[Depends(verify_admin)])
+async def delete_admin_announcement(announcement_id: str, request: Request):
+    db = get_database()
+    res = await db.announcements.delete_one({"id": announcement_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+
+    await manager.broadcast_global_alert("ANNOUNCEMENTS_UPDATED", {"action": "deleted", "id": announcement_id})
+
+    client_ip = request.client.host if request.client else "unknown"
+    await db.admin_audit_logs.insert_one({
+        "id": secrets.token_hex(6),
+        "action": "announcement_deleted",
+        "details": {"id": announcement_id},
+        "ip_address": client_ip,
+        "timestamp": datetime.utcnow().isoformat()
+    })
+    return {"status": "deleted", "id": announcement_id}
+
 
 # ----------------- Admin Maintenance & Live Broadcast -----------------
 
