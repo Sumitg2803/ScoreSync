@@ -1048,6 +1048,16 @@ async def startup_seed_admin():
         pass
 
 
+def get_client_ip(request: Request) -> str:
+    cf_ip = request.headers.get("cf-connecting-ip")
+    if cf_ip:
+        return cf_ip.strip()
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
 def check_ip_lockout(ip: str):
     record = failed_login_tracker.get(ip)
     if record:
@@ -1120,10 +1130,16 @@ async def verify_admin(
     return session.get("email")
 
 
+@app.get("/api/admin/verify")
+async def verify_admin_session(admin_email: str = Depends(verify_admin)):
+    """Verifies active admin session token against MongoDB"""
+    return {"valid": True, "email": admin_email}
+
+
 @app.post("/api/admin/login")
 async def admin_login(payload: dict, request: Request):
     """Admin portal login using email + hashed password stored in MongoDB"""
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     check_ip_lockout(client_ip)
 
     email = (payload.get("email") or "").strip().lower()
@@ -1189,7 +1205,7 @@ async def admin_logout(
         token_hash = hash_token(token)
         session = await db.admin_sessions.find_one_and_delete({"token_hash": token_hash})
         if session:
-            client_ip = request.client.host if request.client else "unknown"
+            client_ip = get_client_ip(request)
             await db.admin_audit_logs.insert_one({
                 "id": secrets.token_hex(6),
                 "action": "admin_logout",
@@ -1219,7 +1235,7 @@ async def admin_change_password(
     admin_email: str = Depends(verify_admin),
 ):
     """Changes admin password after verifying old password, enforcing complexity, and revoking all sessions"""
-    client_ip = request.client.host if request.client else "unknown"
+    client_ip = get_client_ip(request)
     check_ip_lockout(client_ip)
 
     db = get_database()
