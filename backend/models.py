@@ -101,6 +101,7 @@ class MaintenanceConfigModel(BaseModel):
     disable_feedback: bool = False
     master_shutdown: bool = False
     message: str = "ScoreSync is currently undergoing scheduled maintenance. Please check back shortly!"
+    scheduled_message: str = "ScoreSync has upcoming scheduled maintenance. Please plan ahead!"
     scheduled_start: Optional[str] = None
     scheduled_end: Optional[str] = None
     updated_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
@@ -111,6 +112,7 @@ class UpdateMaintenanceRequest(BaseModel):
     disable_feedback: bool = False
     master_shutdown: bool = False
     message: Optional[str] = None
+    scheduled_message: Optional[str] = None
     scheduled_start: Optional[str] = None
     scheduled_end: Optional[str] = None
 

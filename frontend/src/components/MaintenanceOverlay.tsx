@@ -14,6 +14,7 @@ export const computeEffectiveMaintenance = (
   disableFeedback: boolean;
   masterShutdown: boolean;
   isUpcoming: boolean;
+  isWithin15Min: boolean;
   startMs: number | null;
   endMs: number | null;
 } => {
@@ -24,6 +25,7 @@ export const computeEffectiveMaintenance = (
       disableFeedback: false,
       masterShutdown: false,
       isUpcoming: false,
+      isWithin15Min: false,
       startMs: null,
       endMs: null,
     };
@@ -44,6 +46,7 @@ export const computeEffectiveMaintenance = (
   const disableFeedback = Boolean(raw.disable_feedback) || masterShutdown;
   const isActive = disableGames || masterShutdown;
   const isUpcoming = !disableGames && validStart !== null && (validEnd === null || validEnd > validStart) && validStart > nowMs;
+  const isWithin15Min = isUpcoming && validStart !== null && (validStart - nowMs) <= 15 * 60 * 1000;
 
   return {
     isActive,
@@ -51,6 +54,7 @@ export const computeEffectiveMaintenance = (
     disableFeedback,
     masterShutdown,
     isUpcoming,
+    isWithin15Min,
     startMs: validStart,
     endMs: validEnd,
   };
@@ -200,7 +204,7 @@ export const MaintenanceOverlay: React.FC = () => {
     return () => window.removeEventListener('scoresync-broadcast' as any, handleMaintenanceEvent);
   }, []);
 
-  const { isActive: effectiveActive, isUpcoming, startMs } = computeEffectiveMaintenance(
+  const { isActive: effectiveActive, isUpcoming, isWithin15Min, startMs } = computeEffectiveMaintenance(
     rawMaintenanceRef.current || maintenance,
     nowMs
   );
@@ -328,17 +332,24 @@ export const MaintenanceOverlay: React.FC = () => {
 
       {/* 2. Scheduled Upcoming Banner on non-home pages */}
       {isUpcoming && !effectiveActive && location.pathname !== '/' && (
-        <div className="bg-amber-500 text-slate-950 px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
+        <div
+          className={`px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0 ${
+            isWithin15Min
+              ? 'bg-amber-400 text-slate-950'
+              : 'bg-purple-700 text-white'
+          }`}
+        >
           <Clock className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">
-            Scheduled Maintenance: {formattedStart} {formattedEnd ? `→ ${formattedEnd}` : ''}
+            {maintenance?.scheduled_message || 'Scheduled Maintenance'}: {formattedStart}{' '}
+            {formattedEnd ? `→ ${formattedEnd}` : ''}
           </span>
         </div>
       )}
 
       {/* 2b. Sticky Maintenance Notice on in-game pages when maintenance is active */}
       {effectiveActive && location.pathname !== '/' && !isEntryRoute && (
-        <div className="bg-amber-500 text-slate-950 px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
+        <div className="bg-rose-600 text-white px-3 py-2 text-center text-xs font-bold flex items-center justify-center gap-2 shadow-sm z-40 sticky top-0">
           <Wrench className="w-3.5 h-3.5 shrink-0" />
           <span className="truncate">
             Site Maintenance Active: {maintenance?.message || 'New games are temporarily disabled.'}

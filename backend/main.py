@@ -921,6 +921,7 @@ async def get_public_maintenance_status():
             "raw_disable_feedback": False,
             "raw_master_shutdown": False,
             "message": "ScoreSync is currently undergoing scheduled maintenance. Please check back shortly!",
+            "scheduled_message": "ScoreSync has upcoming scheduled maintenance. Please plan ahead!",
             "scheduled_start": None,
             "scheduled_end": None
         }
@@ -955,6 +956,7 @@ async def get_public_maintenance_status():
         "raw_disable_feedback": raw_feedback,
         "raw_master_shutdown": raw_master,
         "message": cfg.get("message", "ScoreSync is undergoing scheduled maintenance."),
+        "scheduled_message": cfg.get("scheduled_message", "ScoreSync has upcoming scheduled maintenance. Please plan ahead!"),
         "scheduled_start": start,
         "scheduled_end": end
     }
@@ -1619,6 +1621,7 @@ async def set_admin_maintenance(req: UpdateMaintenanceRequest, request: Request)
         "disable_feedback": is_feedback,
         "master_shutdown": is_master,
         "message": req.message or "ScoreSync is currently undergoing scheduled maintenance.",
+        "scheduled_message": req.scheduled_message or "ScoreSync has upcoming scheduled maintenance. Please plan ahead!",
         "scheduled_start": req.scheduled_start,
         "scheduled_end": req.scheduled_end,
         "updated_at": datetime.utcnow().isoformat()

@@ -31,6 +31,7 @@ export const WelcomeScreen: React.FC = () => {
     disableGames: isGamesLocked,
     masterShutdown: isMasterLocked,
     isUpcoming: isMaintenanceUpcoming,
+    isWithin15Min,
     startMs,
     endMs,
   } = computeEffectiveMaintenance(maintenance, nowMs);
@@ -223,21 +224,51 @@ export const WelcomeScreen: React.FC = () => {
           transition={{ delay: 0.35, duration: 0.4 }}
           className="space-y-3.5 relative"
         >
-          {/* Scheduled Upcoming Maintenance Notice */}
+          {/* Scheduled Upcoming Maintenance Notice (Purple >15m, Yellow <=15m) */}
           {!isMaintenanceActive && isMaintenanceUpcoming && startMs && (
-            <div className="p-3.5 rounded-2xl bg-purple-50 border border-purple-200 text-purple-950 shadow-xs mb-2">
+            <div
+              className={`p-3.5 rounded-2xl border-2 shadow-xs mb-2 transition-colors duration-300 ${
+                isWithin15Min
+                  ? 'bg-amber-50 border-amber-400 text-amber-950'
+                  : 'bg-purple-50 border-purple-200 text-purple-950'
+              }`}
+            >
               <div className="flex items-start gap-2.5">
-                <div className="w-8 h-8 rounded-xl bg-purple-200/80 flex items-center justify-center shrink-0 mt-0.5">
-                  <Clock className="w-4 h-4 text-purple-800" />
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                    isWithin15Min
+                      ? 'bg-amber-300/80 text-amber-900'
+                      : 'bg-purple-200/80 text-purple-800'
+                  }`}
+                >
+                  <Clock className={`w-4 h-4 ${isWithin15Min ? 'animate-pulse' : ''}`} />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-[11px] font-black uppercase tracking-wider text-purple-900">
-                    Scheduled Maintenance Notice
-                  </h3>
-                  <p className="text-xs font-semibold text-purple-900/90 mt-0.5 leading-relaxed">
-                    {maintenance?.message || 'ScoreSync has upcoming scheduled maintenance.'}
+                  <div className="flex items-center justify-between gap-2">
+                    <h3
+                      className={`text-[11px] font-black uppercase tracking-wider ${
+                        isWithin15Min ? 'text-amber-900' : 'text-purple-900'
+                      }`}
+                    >
+                      {isWithin15Min ? 'Maintenance Starting Soon' : 'Scheduled Maintenance Notice'}
+                    </h3>
+                  </div>
+                  <p
+                    className={`text-xs font-semibold mt-0.5 leading-relaxed ${
+                      isWithin15Min ? 'text-amber-900/90' : 'text-purple-900/90'
+                    }`}
+                  >
+                    {maintenance?.scheduled_message ||
+                      maintenance?.message ||
+                      'ScoreSync has upcoming scheduled maintenance.'}
                   </p>
-                  <div className="mt-2 flex flex-col gap-1 text-[11px] font-bold text-purple-900 bg-purple-200/50 px-2.5 py-1.5 rounded-lg">
+                  <div
+                    className={`mt-2 flex flex-col gap-1 text-[11px] font-bold px-2.5 py-1.5 rounded-lg ${
+                      isWithin15Min
+                        ? 'text-amber-950 bg-amber-200/70'
+                        : 'text-purple-900 bg-purple-200/50'
+                    }`}
+                  >
                     <span>
                       Start: {new Date(startMs).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </span>
@@ -252,22 +283,22 @@ export const WelcomeScreen: React.FC = () => {
             </div>
           )}
 
-          {/* Active Maintenance Lockdown Notice Card */}
+          {/* Active Maintenance Lockdown Notice Card (Red) */}
           {isMaintenanceActive && (
-            <div className="p-4 rounded-2xl bg-amber-50 border-2 border-amber-300 text-amber-950 shadow-sm mb-2">
+            <div className="p-4 rounded-2xl bg-rose-50 border-2 border-rose-400 text-rose-950 shadow-sm mb-2">
               <div className="flex items-start gap-3">
-                <div className="w-9 h-9 rounded-xl bg-amber-200/80 flex items-center justify-center shrink-0 mt-0.5">
-                  <Wrench className="w-4 h-4 text-amber-800" />
+                <div className="w-9 h-9 rounded-xl bg-rose-200/80 flex items-center justify-center shrink-0 mt-0.5">
+                  <Wrench className="w-4 h-4 text-rose-700" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-amber-900">
+                  <h3 className="text-xs font-black uppercase tracking-wider text-rose-900">
                     Site Under Maintenance
                   </h3>
-                  <p className="text-xs font-semibold text-amber-900/90 mt-1 leading-relaxed">
+                  <p className="text-xs font-semibold text-rose-900/90 mt-1 leading-relaxed">
                     {maintenance?.message || 'ScoreSync is temporarily locked for maintenance. Please check back shortly.'}
                   </p>
                   {(startMs || endMs) && (
-                    <div className="mt-2 flex flex-col gap-1 text-[11px] font-bold text-amber-900 bg-amber-200/60 px-2.5 py-1.5 rounded-lg">
+                    <div className="mt-2 flex flex-col gap-1 text-[11px] font-bold text-rose-900 bg-rose-200/60 px-2.5 py-1.5 rounded-lg">
                       {startMs && (
                         <span className="inline-flex items-center gap-1.5">
                           <Clock className="w-3 h-3 shrink-0" />

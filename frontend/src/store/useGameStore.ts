@@ -19,6 +19,7 @@ export interface MaintenanceInfo {
   disable_feedback?: boolean;
   master_shutdown?: boolean;
   message: string;
+  scheduled_message?: string;
   scheduled_start?: string | null;
   scheduled_end?: string | null;
 }
